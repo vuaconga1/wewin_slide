@@ -2,6 +2,7 @@ import { prisma } from "@/services/db/prisma";
 import type { Prisma } from "@/generated/prisma/client";
 import { AppError } from "@/lib/errors";
 import { canManageLesson, type SessionUser } from "@/services/auth/types";
+import { fillFromSource } from "./fill-from-source";
 import {
   normalizeLesson,
   type Lesson,
@@ -50,6 +51,7 @@ function fromRecord(record: {
   graph: Prisma.JsonValue;
   mission: Prisma.JsonValue;
   aiVsHistory: Prisma.JsonValue;
+  sourceText?: string;
   slides: {
     id: string;
     layout: string;
@@ -67,7 +69,7 @@ function fromRecord(record: {
     imageY: number;
   }[];
 }) {
-  return normalizeLesson({
+  return fillFromSource(normalizeLesson({
     id: record.id,
     title_vi: record.titleVi,
     title_en: record.titleEn,
@@ -91,7 +93,7 @@ function fromRecord(record: {
         image_x: slide.imageX,
         image_y: slide.imageY,
       })),
-  });
+  }), record.sourceText ?? "");
 }
 
 const include = {

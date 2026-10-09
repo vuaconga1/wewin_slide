@@ -1,4 +1,5 @@
 import { extractSource } from "@/services/sources/extract-source";
+import { fillFromSource } from "./fill-from-source";
 import { isLayout, layoutInstruction } from "./layout-catalog";
 import {
   normalizeLesson,
@@ -27,7 +28,7 @@ Tạo đúng số slide giáo viên yêu cầu, từ 3 đến 30.
 ${layoutInstruction()}
 Mỗi slide có tiêu đề song ngữ và thân bài song ngữ đúng dạng layout đã chọn. vocab chỉ khi layout là vocab. question và choices chỉ khi layout là quiz.
 Tiếng Anh viết lại đúng CEFR, không dịch từng chữ. Tên riêng giữ tiếng Việt. Trường type để cùng giá trị với layout.
-Khi tư liệu đủ, viết mission và ai_vs_history từ TƯ LIỆU. mission là một cảnh quyết định: scene_vi, scene_en, question_vi, question_en, và ít nhất hai choices có vi, en, historical, consequence_vi, consequence_en. ai_vs_history có câu statement_vi, statement_en, answer (fact, interpretation hoặc unsupported), explanation_vi, explanation_en. Nếu tư liệu không đủ cho một phần, không bịa nội dung: mission là null, ai_vs_history là [], graph.nodes là []. Thân slide để rỗng nếu không có câu trong tư liệu để điền.
+Khi tư liệu có nhân vật, mốc thời gian, địa điểm hoặc một quyết định, phải điền graph, mission và ai_vs_history từ TƯ LIỆU trong cùng JSON này. mission là một cảnh quyết định: scene_vi, scene_en, question_vi, question_en, và ít nhất hai choices có vi, en, historical, consequence_vi, consequence_en. ai_vs_history có câu statement_vi, statement_en, answer (fact, interpretation hoặc unsupported), explanation_vi, explanation_en. graph có nút person, event, time, place, cause, decision, consequence và cạnh nối các nút đó. Chỉ để graph.nodes rỗng, mission null và ai_vs_history rỗng khi tư liệu quá ngắn, không đủ một sự kiện. Không bịa dữ kiện ngoài tư liệu. Thân slide để rỗng nếu không có câu trong tư liệu để điền.
 JSON: {"title_vi":"","title_en":"","warnings":[],"graph":{"nodes":[{"id":"","label":"","type":"person|event|time|place|cause|decision|consequence"}],"edges":[{"from":"","to":"","label":""}]},"slides":[{"layout":"context","type":"context","title_vi":"","title_en":"","body_vi":"","body_en":"","vocab":[{"en":"","vi":"","example":""}],"question_vi":"","question_en":"","choices":[{"vi":"","en":"","correct":false,"feedback_vi":"","feedback_en":""}]}],"mission":{"scene_vi":"","scene_en":"","question_vi":"","question_en":"","choices":[{"vi":"","en":"","historical":false,"consequence_vi":"","consequence_en":""}]},"ai_vs_history":[{"statement_vi":"","statement_en":"","answer":"fact|interpretation|unsupported","explanation_vi":"","explanation_en":""}]}`;
 
 function splitChunks(source: string, count: number) {
@@ -300,7 +301,7 @@ export async function generateLesson(request: GenerateRequest) {
 
   if (hasOpenAI || hasAnthropic) lesson.warnings = [...warnings, ...lesson.warnings];
 
-  const fitted = fitCount(lesson, request.count);
+  const fitted = fillFromSource(fitCount(lesson, request.count), extracted.text);
   if (extracted.images[0] && fitted.slides[0]) {
     fitted.slides[0] = { ...fitted.slides[0], image_url: extracted.images[0] };
   }

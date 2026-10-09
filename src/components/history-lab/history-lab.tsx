@@ -115,13 +115,14 @@ export function HistoryLab({
   useEffect(() => {
     if (!presenting || !lesson) return;
     const slideCount = lesson.slides.length;
+    const onLesson = view === "lesson";
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setPresenting(false);
         if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
       }
-      if (event.key === "ArrowRight") setIndex((value) => Math.min(slideCount - 1, value + 1));
-      if (event.key === "ArrowLeft") setIndex((value) => Math.max(0, value - 1));
+      if (onLesson && event.key === "ArrowRight") setIndex((value) => Math.min(slideCount - 1, value + 1));
+      if (onLesson && event.key === "ArrowLeft") setIndex((value) => Math.max(0, value - 1));
       if (event.key === "F5") event.preventDefault();
     };
     const onFullscreen = () => {
@@ -133,7 +134,7 @@ export function HistoryLab({
       window.removeEventListener("keydown", onKey);
       document.removeEventListener("fullscreenchange", onFullscreen);
     };
-  }, [presenting, lesson]);
+  }, [presenting, lesson, view]);
 
   async function persist(next: Lesson) {
     if (!next.id) return next;
@@ -206,14 +207,14 @@ export function HistoryLab({
     if (!lesson) return;
     setError("");
     try {
-      await downloadLessonPdf(lesson);
+      await downloadLessonPdf(lesson, view);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Không tải được PDF.");
     }
   }
 
   function onPresentClick(event: React.MouseEvent) {
-    if (!lesson) return;
+    if (!lesson || view !== "lesson") return;
     const target = event.target instanceof Element ? event.target : null;
     if (!target?.closest(".slide")) return;
     if (target.closest("button, a, input, textarea, select")) return;
@@ -222,6 +223,7 @@ export function HistoryLab({
 
   function onPresentContextMenu(event: React.MouseEvent) {
     event.preventDefault();
+    if (view !== "lesson") return;
     const target = event.target instanceof Element ? event.target : null;
     if (!target?.closest(".slide")) return;
     setIndex((value) => Math.max(0, value - 1));
@@ -607,28 +609,48 @@ export function HistoryLab({
           )}
         </main>
       </div>
-      {presenting && lesson && slide ? (
+      {presenting && lesson ? (
         <div
           className="present"
           onClick={onPresentClick}
           onContextMenu={onPresentContextMenu}
         >
-          <SlideCard slide={slide} index={index} total={lesson.slides.length} lang={lang} answered={answered[index]} />
+          <div className="present-stage">
+            {view === "graph" ? (
+              <GraphView lesson={lesson} />
+            ) : view === "mission" ? (
+              <MissionView key={`present-${lesson.id ?? "mission"}`} lesson={lesson} lang={lang} />
+            ) : view === "verify" ? (
+              <VerifyView key={`present-${lesson.id ?? "verify"}`} lesson={lesson} lang={lang} />
+            ) : view === "report" ? (
+              <ReportView />
+            ) : slide ? (
+              <SlideCard slide={slide} index={index} total={lesson.slides.length} lang={lang} answered={answered[index]} />
+            ) : null}
+          </div>
           <div className="nav">
-            <button type="button" className="btn" onClick={() => setIndex((value) => Math.max(0, value - 1))} disabled={index === 0}>
-              ← Trước
-            </button>
+            {view === "lesson" ? (
+              <button type="button" className="btn" onClick={() => setIndex((value) => Math.max(0, value - 1))} disabled={index === 0}>
+                ← Trước
+              </button>
+            ) : (
+              <span />
+            )}
             <button type="button" className="btn" onClick={stopPresent}>
               Thoát
             </button>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setIndex((value) => Math.min(lesson.slides.length - 1, value + 1))}
-              disabled={index === lesson.slides.length - 1}
-            >
-              Sau →
-            </button>
+            {view === "lesson" ? (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setIndex((value) => Math.min(lesson.slides.length - 1, value + 1))}
+                disabled={!slide || index === lesson.slides.length - 1}
+              >
+                Sau →
+              </button>
+            ) : (
+              <span />
+            )}
           </div>
         </div>
       ) : null}

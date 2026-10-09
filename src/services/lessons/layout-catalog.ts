@@ -444,10 +444,28 @@ export function readMap(body: string) {
       captions,
     };
   }
+  const prose = rest.join(" ");
+  const lead = prose.match(
+    /(?:địa điểm(?:\s+xuất phát)?|nơi xuất phát|starting place|place(?:\s+of\s+departure)?)\s+(?:là|is|:)\s+([^.]{3,90})/i,
+  );
+  if (lead) {
+    const bits = sentences(prose);
+    const mark = lead[1].trim().slice(0, 16);
+    const after = bits.filter((bit) => !bit.toLowerCase().includes(mark.toLowerCase()));
+    return {
+      place: lead[1].trim(),
+      description: after[0] ?? "",
+      captions: captions.length > 0 ? captions : after.slice(1, 4),
+    };
+  }
   if (rest.length > 1 && rest[0].length <= 80) {
     return { place: rest[0], description: rest.slice(1).join(" "), captions };
   }
-  return { place: "", description: rest.join(" "), captions };
+  const bits = sentences(prose);
+  if (bits.length > 2) {
+    return { place: "", description: bits[0] ?? "", captions: captions.length > 0 ? captions : bits.slice(1, 4) };
+  }
+  return { place: "", description: prose, captions };
 }
 
 const CHARACTER_FIELDS = [
@@ -457,6 +475,17 @@ const CHARACTER_FIELDS = [
   { key: "meaning", test: /^(ý nghĩa|y nghia|meaning)\s*:\s*/i },
 ] as const;
 
+const PERSON_NAME = /(?:Nguyễn|Phan|Trần|Lê|Hồ|Lý|Đinh|Võ|Vũ)\s+[A-ZÀ-ỸĐ][A-Za-zÀ-ỹĐđ]+(?:\s+[A-ZÀ-ỸĐ][A-Za-zÀ-ỹĐđ]+){0,3}/g;
+
+function personNames(value: string) {
+  return value.match(PERSON_NAME) ?? [];
+}
+
+function isPersonName(value: string) {
+  const names = personNames(value);
+  return names.length === 1 && names[0] === value.trim();
+}
+
 export function readCharacter(body: string) {
   const found: Record<(typeof CHARACTER_FIELDS)[number]["key"], string> = {
     name: "",
@@ -465,15 +494,22 @@ export function readCharacter(body: string) {
     meaning: "",
   };
   const leftover: string[] = [];
+  const labeledNames: string[] = [];
   for (const line of linesOf(body)) {
     const field = CHARACTER_FIELDS.find((item) => item.test.test(line));
     if (!field) {
       leftover.push(line);
       continue;
     }
-    found[field.key] = line.replace(field.test, "").trim();
+    const value = line.replace(field.test, "").trim();
+    if (field.key === "name") labeledNames.push(...personNames(value));
+    else found[field.key] = value;
   }
-  return { ...found, narrative: leftover.join(" ") };
+  const pool = [...labeledNames, ...leftover.flatMap(personNames)];
+  const named = found.role || found.action || found.meaning ? pool.at(-1) : pool[0];
+  found.name = named && isPersonName(named) ? named : pool[0] ?? "";
+  const narrative = found.role || found.action || found.meaning ? "" : leftover.join(" ");
+  return { ...found, narrative };
 }
 
 export type ComparedSide = { label: string; points: string[] };

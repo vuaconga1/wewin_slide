@@ -334,6 +334,26 @@ textarea.f { min-height: 100px; resize: vertical; }
   display: flex;
   flex-direction: column;
 }
+.present-stage {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+.present-stage > .graph,
+.present-stage > .mission,
+.present-stage > .verify,
+.present-stage > .empty {
+  flex: 1;
+}
+.present .bar,
+.present .bar h3,
+.present .bar small { color: #fff; }
+.present .empty {
+  background: #f3f6fb;
+  color: var(--ink);
+}
 .present .slide { flex: 1; min-height: 0; cursor: pointer; }
 .filebar {
   position: sticky;

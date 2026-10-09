@@ -212,7 +212,7 @@ function LayoutBody({
         </div>
         <div>
           {vi.name || en.name ? <b className="slot-kicker">{show(lang, vi.name, en.name)}</b> : null}
-          {rows.length === 0 ? show(lang, vi.narrative || slide.body_vi, en.narrative || slide.body_en) : show(lang, vi.narrative, en.narrative)}
+          {rows.length === 0 ? show(lang, vi.narrative || slide.body_vi, en.narrative || slide.body_en) : null}
           {rows.map((row) => (
             <div className="card char-row" key={row.vi}>
               <b className="slot-kicker">{face(lang, row.vi, row.en)}</b>

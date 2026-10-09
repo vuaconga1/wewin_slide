@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+model User {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  passwordHash String
+  role         Role
+  createdAt    DateTime  @default(now())
+  lessons      Lesson[]
+  sessions     Session[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Deck {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  slides      Slide[]
+}
+
+model Slide {
+  id        String   @id @default(cuid())
+  deckId    String
+  deck      Deck     @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  order     Int
+  title     String
+  body      String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([deckId, order])
+  @@index([deckId])
+}
+
+model Lesson {
+  id             String        @id @default(cuid())
+  topic          String
+  grade          String
+  cefr           String
+  mode           String
+  durationMin    Int
+  requestedCount Int
+  template       String
+  notes          String        @default("")
+  titleVi        String
+  titleEn        String
+  warnings       Json
+  graph          Json
+  mission        Json
+  aiVsHistory    Json
+  sourceText     String        @default("")
+  ownerId        String?
+  owner          User?         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  slides         LessonSlide[]
+
+  @@index([ownerId])
+}
+
+model LessonSlide {
+  id           String   @id @default(cuid())
+  lessonId     String
+  lesson       Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  order        Int
+  layout       String
+  type         String
+  titleVi      String
+  titleEn      String
+  bodyVi       String   @default("")
+  bodyEn       String   @default("")
+  teacherNotes String   @default("")
+  vocab        Json
+  questionVi   String   @default("")
+  questionEn   String   @default("")
+  choices      Json
+  sourceQuote  String   @default("")
+  sourceOk     Boolean  @default(true)
+  imageUrl     String?
+  imageX       Float    @default(72)
+  imageY       Float    @default(62)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([lessonId, order])
+  @@index([lessonId])
+}

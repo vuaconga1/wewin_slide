@@ -3,31 +3,31 @@ export const LAYOUT_CATALOG = [
     id: "title",
     label: "Mở đầu",
     when: "Slide mở bài: tên sự kiện, niên đại và câu dẫn.",
-    fields: "title_vi, title_en, body_vi/body_en là câu dẫn. Không tạo khung HTML.",
+    fields: "title_vi, title_en, body_vi/body_en là câu dẫn đủ ý mở bài nếu tư liệu có. Không tạo khung HTML.",
   },
   {
     id: "objectives",
     label: "Mục tiêu học tập",
     when: "Khi cần nêu mục tiêu của bài, tối đa ba ý.",
-    fields: "body_vi và body_en: mỗi dòng một mục tiêu, tối đa 3.",
+    fields: "body_vi và body_en: mỗi dòng một mục tiêu. Lấy đủ mục tiêu có trong tư liệu, tối đa 4. Không rút còn một dòng nếu tư liệu có nhiều mục tiêu.",
   },
   {
     id: "context",
     label: "Bối cảnh",
     when: "Khi kể bối cảnh lịch sử trước sự kiện chính.",
-    fields: "Đoạn đầu là bối cảnh. Các dòng bắt đầu bằng \"- \" là ý Cần biết trước, tối đa 3.",
+    fields: "Đoạn đầu là bối cảnh, gồm các câu liên quan trong tư liệu, không rút thành một câu nếu tư liệu còn ý. Các dòng bắt đầu bằng \"- \" là ý Cần biết trước, tối đa 4.",
   },
   {
     id: "timeline",
     label: "Dòng thời gian",
     when: "Khi có các mốc thời gian hoặc diễn biến nối tiếp.",
-    fields: "Mỗi dòng body_vi và body_en dạng `nhãn | mô tả`, tối đa 4. Không chia bằng HTML.",
+    fields: "Mỗi dòng body_vi và body_en là một mốc, cùng thứ tự ở hai ngôn ngữ, tối đa 6. Điền đủ mốc có trong tư liệu. Có thể viết `nhãn | mô tả`. Không chia bằng HTML.",
   },
   {
     id: "map",
     label: "Bản đồ / địa điểm",
     when: "Khi bài nói về địa điểm, khu vực hoặc vị trí.",
-    fields: "Dòng `Địa điểm: ...`, rồi đoạn mô tả, rồi tối đa 3 dòng \"- \" chú thích. Ảnh chỉ khi giáo viên đã có.",
+    fields: "Dòng `Địa điểm: ...`, rồi đoạn mô tả đủ ý, rồi tối đa 4 dòng \"- \" chú thích. Ảnh chỉ khi giáo viên đã có.",
   },
   {
     id: "character",
@@ -39,13 +39,13 @@ export const LAYOUT_CATALOG = [
     id: "comparison",
     label: "So sánh",
     when: "Khi đối chiếu hai phe, hai giai đoạn hoặc hai cách hiểu.",
-    fields: "A: nhãn, các dòng \"- \" của vế A, B: nhãn, các dòng \"- \" của vế B, rồi dòng --- và câu kết. Không lặp một đoạn cho cả hai vế.",
+    fields: "A: nhãn, các dòng \"- \" của vế A, B: nhãn, các dòng \"- \" của vế B, rồi dòng --- và câu kết. Mỗi vế nhiều ý khi tư liệu có nhiều điểm. Không lặp một đoạn cho cả hai vế.",
   },
   {
     id: "cause-effect",
     label: "Nguyên nhân – diễn biến – kết quả",
     when: "Khi tách nguyên nhân, diễn biến và hệ quả.",
-    fields: "Ba mục Nguyên nhân, Diễn biến, Hệ quả; mỗi mục có các dòng \"- \". Bản tiếng Anh dùng Cause, Development, Consequence.",
+    fields: "Ba mục Nguyên nhân, Diễn biến, Hệ quả; mỗi mục có các dòng \"- \" cho từng ý trong tư liệu, không dừng ở một ý nếu tư liệu còn ý. Bản tiếng Anh dùng Cause, Development, Consequence.",
   },
   {
     id: "quote",
@@ -60,22 +60,16 @@ export const LAYOUT_CATALOG = [
     fields: "vocab tối đa 6 mục {en, vi, example}. example là câu ngắn lấy từ nội dung bài.",
   },
   {
-    id: "quiz",
-    label: "Câu hỏi nhanh",
-    when: "Khi cần một câu trắc nghiệm trên slide.",
-    fields: "question_vi, question_en và 2–4 choices {vi, en, correct, feedback_vi, feedback_en}. Không đặt trắc nghiệm vào layout khác.",
-  },
-  {
     id: "summary",
     label: "Tổng kết",
     when: "Slide kết: câu chốt, ý cần nhớ, câu hỏi suy ngẫm.",
-    fields: "Dòng đầu body là câu kết. Tối đa 3 dòng \"- \" là ý cần nhớ. question_vi/question_en là câu suy ngẫm nếu có.",
+    fields: "Dòng đầu body là câu kết đủ ý. Các dòng \"- \" là ý cần nhớ, tối đa 4, khi tư liệu có nhiều ý. question_vi/question_en là câu suy ngẫm nếu có. choices để [].",
   },
 ] as const;
 
-export type SlideLayout = (typeof LAYOUT_CATALOG)[number]["id"];
+export type SlideLayout = (typeof LAYOUT_CATALOG)[number]["id"] | "quiz";
 
-export const SLIDE_LAYOUTS = LAYOUT_CATALOG.map((item) => item.id) as readonly SlideLayout[];
+export const SLIDE_LAYOUTS = LAYOUT_CATALOG.map((item) => item.id);
 
 const ALIASES: Record<string, SlideLayout> = {
   intro: "title",
@@ -109,10 +103,6 @@ const ALIASES: Record<string, SlideLayout> = {
   vocabulary: "vocab",
   glossary: "vocab",
   words: "vocab",
-  question: "quiz",
-  questions: "quiz",
-  mcq: "quiz",
-  test: "quiz",
   review: "summary",
   closing: "summary",
   conclusion: "summary",
@@ -128,18 +118,22 @@ const HINTS: { test: RegExp; layout: SlideLayout }[] = [
   { test: /cause|effect|nguyen.?nhan|he.?qua|consequence/, layout: "cause-effect" },
   { test: /quote|trich|document|excerpt|citation/, layout: "quote" },
   { test: /vocab|tu.?vung|glossar/, layout: "vocab" },
-  { test: /quiz|question|trac.?nghiem|mcq/, layout: "quiz" },
   { test: /summ|review|tong.?ket|closing|conclusion/, layout: "summary" },
   { test: /title|cover|mo.?dau|opening|intro/, layout: "title" },
   { test: /context|boi.?canh|background|story/, layout: "context" },
 ];
 
-export function isLayout(value: string): value is SlideLayout {
+export function isLayout(value: string): value is Exclude<SlideLayout, "quiz"> {
   return (SLIDE_LAYOUTS as readonly string[]).includes(value);
 }
 
 export function layoutById(id: SlideLayout) {
-  return LAYOUT_CATALOG.find((item) => item.id === id) ?? LAYOUT_CATALOG[2];
+  const found = LAYOUT_CATALOG.find((item) => item.id === id);
+  if (found) return found;
+  if (id === "quiz") {
+    return { id: "quiz" as const, label: "Câu hỏi nhanh", when: "", fields: "" };
+  }
+  return LAYOUT_CATALOG[2];
 }
 
 /** Map any model-written name onto a catalog id. Unknown names never become a new layout. */
@@ -149,6 +143,7 @@ export function coerceLayout(value: string): SlideLayout {
     .trim()
     .toLowerCase()
     .replace(/[_\s]+/g, "-");
+  if (key === "quiz") return "quiz";
   if (isLayout(key)) return key;
   const compact = key.replace(/-/g, "");
   if (ALIASES[key]) return ALIASES[key];
@@ -163,9 +158,9 @@ export function layoutInstruction() {
   const lines = LAYOUT_CATALOG.map(
     (item) => `- ${item.id} (${item.label}): ${item.when} Điền: ${item.fields}`,
   );
-  return `Chỉ chọn layout trong danh sách cố định sau. Không bịa id mới, không xuất HTML/CSS, không mô tả bố cục mới. Nếu phân vân, dùng context.
+  return `Chỉ chọn layout trong danh sách cố định sau. Không bịa id mới, không dùng quiz, không xuất HTML/CSS, không mô tả bố cục mới. Nếu phân vân, dùng context.
 ${lines.join("\n")}
-Slide đầu nên là title, slide cuối nên là summary khi nội dung cho phép. Không bắt buộc dùng hết layout.`;
+Slide đầu nên là title, slide cuối nên là summary khi nội dung cho phép. Không bắt buộc dùng hết layout. Điền đủ ý tư liệu vào từng slide. Không bịa để làm đầy.`;
 }
 
 type Pair = { vi: string; en: string };
@@ -208,7 +203,7 @@ function timelinePairs(value: unknown): Pair[] {
   if (!Array.isArray(value)) return [];
   const pairs: Pair[] = [];
   for (const item of value) {
-    if (pairs.length >= 4) break;
+    if (pairs.length >= 6) break;
     if (typeof item === "string") {
       const vi = item.trim();
       if (vi) pairs.push({ vi: vi.includes("|") ? vi : vi, en: "" });
@@ -249,7 +244,7 @@ export function foldLayoutText(
   }
 
   if (layout === "objectives") {
-    const items = readPairs(raw.objectives ?? raw.objective_items, 3);
+    const items = readPairs(raw.objectives ?? raw.objective_items, 4);
     if (items.length === 0) return keep;
     return {
       body_vi: items.map((item) => item.vi).filter(Boolean).join("\n"),
@@ -258,7 +253,7 @@ export function foldLayoutText(
   }
 
   if (layout === "context") {
-    const know = readPairs(raw.know_before ?? raw.prerequisites, 3);
+    const know = readPairs(raw.know_before ?? raw.prerequisites, 4);
     if (know.length === 0) return keep;
     return {
       body_vi: [bodyVi, ...know.map((item) => `- ${item.vi}`)].filter(Boolean).join("\n"),
@@ -270,7 +265,7 @@ export function foldLayoutText(
     const place = record(raw.place);
     const placeVi = str(raw.place_vi) || str(place.vi) || (typeof raw.place === "string" ? str(raw.place) : "");
     const placeEn = str(raw.place_en) || str(place.en);
-    const captions = readPairs(raw.captions, 3);
+    const captions = readPairs(raw.captions, 4);
     const descriptionVi = str(raw.description_vi) || bodyVi;
     const descriptionEn = str(raw.description_en) || bodyEn;
     if (!placeVi && captions.length === 0) return keep;
@@ -316,8 +311,8 @@ export function foldLayoutText(
 
   if (layout === "comparison") {
     const block = record(raw.comparison);
-    const a = readPairs(block.points_a ?? raw.points_a ?? raw.side_a, 4);
-    const b = readPairs(block.points_b ?? raw.points_b ?? raw.side_b, 4);
+    const a = readPairs(block.points_a ?? raw.points_a ?? raw.side_a, 6);
+    const b = readPairs(block.points_b ?? raw.points_b ?? raw.side_b, 6);
     if (a.length === 0 && b.length === 0) return keep;
     const labelA = str(block.label_a) || str(raw.label_a) || "Vế A";
     const labelB = str(block.label_b) || str(raw.label_b) || "Vế B";
@@ -336,9 +331,9 @@ export function foldLayoutText(
   }
 
   if (layout === "cause-effect") {
-    const causes = readPairs(raw.causes, 4);
-    const developments = readPairs(raw.developments, 4);
-    const consequences = readPairs(raw.consequences, 4);
+    const causes = readPairs(raw.causes, 6);
+    const developments = readPairs(raw.developments, 6);
+    const consequences = readPairs(raw.consequences, 6);
     if (causes.length === 0 && developments.length === 0 && consequences.length === 0) return keep;
     return {
       body_vi: [
@@ -359,7 +354,7 @@ export function foldLayoutText(
   }
 
   if (layout === "summary") {
-    const points = readPairs(raw.summary_points ?? raw.remember, 3);
+    const points = readPairs(raw.summary_points ?? raw.remember, 4);
     const conclusionVi = str(raw.conclusion_vi);
     const conclusionEn = str(raw.conclusion_en);
     if (points.length === 0 && !conclusionVi) return keep;
@@ -396,45 +391,53 @@ function sentences(body: string) {
 
 export type TimelineItem = { label: string; vi: string; en: string };
 
-export function readTimeline(bodyVi: string, bodyEn: string): TimelineItem[] {
-  const viLines = linesOf(bodyVi);
-  const enLines = linesOf(bodyEn);
-  if (viLines.some((line) => line.includes("|"))) {
-    return viLines
-      .filter((line) => line.includes("|"))
-      .slice(0, 4)
-      .map((line, index) => {
-        const [label, ...rest] = line.split("|");
-        const enLine = enLines[index] ?? "";
-        const enText = enLine.includes("|") ? enLine.split("|").slice(1).join("|").trim() : enLine.trim();
-        return { label: label.trim(), vi: rest.join("|").trim(), en: enText };
-      });
+function timelineParts(body: string) {
+  const rows = linesOf(body);
+  const piped = rows.filter((line) => line.includes("|"));
+  if (piped.length > 0) {
+    return piped.slice(0, 6).map((line) => {
+      const [label, ...rest] = line.split("|");
+      return { label: label.trim(), text: rest.join("|").trim() };
+    });
   }
-  return bodyVi
-    .split(/[.;]\s+/)
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .slice(0, 4)
-    .map((vi) => ({ label: "", vi, en: "" }));
+  const parts =
+    rows.length > 1
+      ? rows
+      : body
+          .split(/(?<=[.!?])\s+/)
+          .map((part) => part.trim())
+          .filter(Boolean);
+  return parts.slice(0, 6).map((text) => ({ label: "", text }));
+}
+
+export function readTimeline(bodyVi: string, bodyEn: string): TimelineItem[] {
+  const vi = timelineParts(bodyVi);
+  const en = timelineParts(bodyEn);
+  const count = Math.min(6, Math.max(vi.length, en.length));
+  return Array.from({ length: count }, (_, index) => ({
+    label: vi[index]?.label || en[index]?.label || "",
+    vi: vi[index]?.text ?? "",
+    en: en[index]?.text ?? "",
+  })).filter((item) => item.label || item.vi || item.en);
 }
 
 export function readObjectives(body: string) {
   const rows = linesOf(body);
   if (rows.length === 0) return [];
-  if (rows.length === 1) return sentences(rows[0]).slice(0, 3);
-  return rows.slice(0, 3);
+  if (rows.length === 1) return sentences(rows[0]).slice(0, 4);
+  return rows.slice(0, 4);
 }
 
 export function readContext(body: string) {
   const rows = linesOf(body);
-  const know = rows.filter(isBullet).map(bulletText).slice(0, 3);
+  const know = rows.filter(isBullet).map(bulletText).slice(0, 4);
   const narrative = rows.filter((line) => !isBullet(line)).join(" ");
   return { narrative, know };
 }
 
 export function readMap(body: string) {
   const rows = linesOf(body);
-  const captions = rows.filter(isBullet).map(bulletText).slice(0, 3);
+  const captions = rows.filter(isBullet).map(bulletText).slice(0, 4);
   const rest = rows.filter((line) => !isBullet(line));
   const placeLine = rest.find((line) => /^(địa điểm|dia diem|place|location)\s*:/i.test(line));
   if (placeLine) {
@@ -455,7 +458,7 @@ export function readMap(body: string) {
     return {
       place: lead[1].trim(),
       description: after[0] ?? "",
-      captions: captions.length > 0 ? captions : after.slice(1, 4),
+      captions: captions.length > 0 ? captions : after.slice(1, 5),
     };
   }
   if (rest.length > 1 && rest[0].length <= 80) {
@@ -463,7 +466,7 @@ export function readMap(body: string) {
   }
   const bits = sentences(prose);
   if (bits.length > 2) {
-    return { place: "", description: bits[0] ?? "", captions: captions.length > 0 ? captions : bits.slice(1, 4) };
+    return { place: "", description: bits[0] ?? "", captions: captions.length > 0 ? captions : bits.slice(1, 5) };
   }
   return { place: "", description: prose, captions };
 }
@@ -599,10 +602,10 @@ export function readCauseEffect(body: string) {
 
 export function readSummary(body: string) {
   const rows = linesOf(body);
-  const points = rows.filter(isBullet).map(bulletText).slice(0, 3);
+  const points = rows.filter(isBullet).map(bulletText).slice(0, 4);
   const conclusion = rows.filter((line) => !isBullet(line)).join(" ");
   if (points.length === 0 && rows.length > 1) {
-    return { conclusion: rows[0], points: rows.slice(1, 4) };
+    return { conclusion: rows[0], points: rows.slice(1, 5) };
   }
   return { conclusion, points };
 }

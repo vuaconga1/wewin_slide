@@ -244,39 +244,161 @@ export function GraphView({ lesson }: { lesson: Lesson }) {
   );
 }
 
-export function MissionView({ lesson, lang }: { lesson: Lesson; lang: Lang }) {
-  const mission = lesson.mission;
-  const [open, setOpen] = useState<number | null>(null);
-  const hasCopy = Boolean(
-    mission &&
-      (mission.scene_vi.trim() ||
-        mission.scene_en.trim() ||
-        mission.question_vi.trim() ||
-        mission.question_en.trim() ||
-        mission.choices.some((choice) => choice.vi.trim() || choice.en.trim())),
+function label(lang: Lang, vi: string, en: string) {
+  if (lang === "en") return en;
+  if (lang === "vi") return vi;
+  return `${vi} / ${en}`;
+}
+
+function LangSwitch({ lang, onLang }: { lang: Lang; onLang: (lang: Lang) => void }) {
+  return (
+    <div className="seg">
+      {(["vi", "both", "en"] as const).map((item) => (
+        <button key={item} type="button" className={lang === item ? "on" : ""} onClick={() => onLang(item)}>
+          {item === "vi" ? "VI" : item === "both" ? "VI + EN" : "EN"}
+        </button>
+      ))}
+    </div>
   );
-  if (!mission || !hasCopy) return <SourceGap message="Nguồn chưa đủ để tạo Time Travel." />;
+}
+
+export function MissionView({
+  lesson,
+  lang,
+  onLang,
+}: {
+  lesson: Lesson;
+  lang: Lang;
+  onLang: (lang: Lang) => void;
+}) {
+  const resetKey = `${lesson.id ?? "new"}:${lesson.mission.questions.map((question) => question.id).join("|")}`;
+  return <MissionSession key={resetKey} lesson={lesson} lang={lang} onLang={onLang} />;
+}
+
+function MissionSession({
+  lesson,
+  lang,
+  onLang,
+}: {
+  lesson: Lesson;
+  lang: Lang;
+  onLang: (lang: Lang) => void;
+}) {
+  const questions = lesson.mission.questions;
+  const [cursor, setCursor] = useState(0);
+  const [picks, setPicks] = useState<Record<string, string>>({});
+  const [phase, setPhase] = useState<"play" | "done" | "review">("play");
+
+  if (questions.length === 0) {
+    return (
+      <div className="mission">
+        <div className="bar">
+          <LangSwitch lang={lang} onLang={onLang} />
+        </div>
+        <p className="mission-gap">Nguồn chưa đủ để tạo Time Travel.</p>
+      </div>
+    );
+  }
+
+  if (phase === "done") {
+    return (
+      <div className="mission">
+        <div className="bar">
+          <LangSwitch lang={lang} onLang={onLang} />
+        </div>
+        <div className="mission-done">
+          <h2>{label(lang, "Đã hoàn thành", "Completed")}</h2>
+          <p>{label(lang, "Bạn đã xem hết các câu Time Travel.", "You have finished the Time Travel questions.")}</p>
+          <button
+            type="button"
+            className="btn mission-next"
+            onClick={() => {
+              setCursor(0);
+              setPhase("review");
+            }}
+          >
+            {label(lang, "Xem lại các câu", "Review questions")}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const question = questions[Math.min(cursor, questions.length - 1)];
+  if (!question) return <SourceGap message="Nguồn chưa đủ để tạo Time Travel." />;
+  const pickedId = picks[question.id];
+  const locked = pickedId != null;
+  const correctOption = question.options.find((option) => option.id === question.correctOptionId) ?? question.options[0];
+  const pickedCorrect = pickedId === question.correctOptionId;
+  const showNegation = Boolean(question.incorrectChoiceResponseVi.trim() || question.incorrectChoiceResponseEn.trim());
+
+  function choose(optionId: string) {
+    if (locked) return;
+    setPicks((current) => ({ ...current, [question.id]: optionId }));
+  }
+
+  function continueQuestion() {
+    if (cursor < questions.length - 1) {
+      setCursor(cursor + 1);
+      return;
+    }
+    setPhase("done");
+  }
 
   return (
     <div className="mission">
-  
-      <h2>ENTER HISTORY</h2>
-      {show(lang, mission.scene_vi, mission.scene_en)}
-      <div style={{ fontSize: 22, fontWeight: 800, margin: "22px 0 8px" }}>
-        {show(lang, mission.question_vi, mission.question_en)}
+      <div className="bar">
+        <LangSwitch lang={lang} onLang={onLang} />
+        <span className="mission-progress">
+          {label(lang, `Câu ${cursor + 1}/${questions.length}`, `Question ${cursor + 1}/${questions.length}`)}
+        </span>
       </div>
-      {mission.choices.map((choice, index) => (
-        <div key={`${choice.vi}-${index}`}>
-          {choice.vi.trim() || choice.en.trim() ? (
-            <button type="button" className="ch" onClick={() => setOpen(index)}>
-              {[choice.vi.trim(), choice.en.trim()].filter(Boolean).join(" / ")}
+      <div className="mission-copy">
+        {show(lang, question.contextVi, question.contextEn)}
+        <div className="mission-question">{show(lang, question.questionVi, question.questionEn)}</div>
+      </div>
+      <div className="mission-options">
+        {question.options.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            className={pickedId === option.id ? "ch picked" : "ch"}
+            disabled={locked}
+            aria-pressed={pickedId === option.id}
+            onClick={() => choose(option.id)}
+          >
+            {show(lang, option.textVi, option.textEn)}
+          </button>
+        ))}
+      </div>
+      {locked && correctOption ? (
+        <div className="fb mission-result">
+          {pickedCorrect ? (
+            show(lang, question.historicalOutcomeVi, question.historicalOutcomeEn)
+          ) : (
+            <>
+              {showNegation ? show(lang, question.incorrectChoiceResponseVi, question.incorrectChoiceResponseEn) : null}
+              <div className="mission-fact">
+                <b>{label(lang, "Lịch sử thực tế", "Recorded history")}</b>
+                {show(lang, correctOption.textVi, correctOption.textEn)}
+                {show(lang, question.historicalOutcomeVi, question.historicalOutcomeEn)}
+              </div>
+            </>
+          )}
+        </div>
+      ) : null}
+      {locked ? (
+        <div className="mission-actions">
+          {phase === "review" ? (
+            <button type="button" className="btn mission-next" disabled={cursor === 0} onClick={() => setCursor((value) => Math.max(0, value - 1))}>
+              {label(lang, "Câu trước", "Previous")}
             </button>
           ) : null}
-          <div className={open === index ? "fb" : "fb hide"}>
-            {show(lang, choice.consequence_vi ?? "", choice.consequence_en ?? "")}
-          </div>
+          <button type="button" className="btn mission-next" onClick={continueQuestion}>
+            {label(lang, "Tiếp tục", "Continue")}
+          </button>
         </div>
-      ))}
+      ) : null}
     </div>
   );
 }

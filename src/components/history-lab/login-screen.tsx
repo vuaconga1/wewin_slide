@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -38,8 +39,7 @@ export function LoginScreen({ dbError = "" }: { dbError?: string }) {
   return (
     <div className="login-page">
       <form className="login-card" onSubmit={onSubmit}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/assets/wewin-logo.png" alt="WeWIN" />
+        <Image src="/assets/wewin-logo.png" alt="WeWIN" width={205} height={52} priority sizes="205px" />
         <h1>WEWIN AI History Lab</h1>
         <p>Đăng nhập để tạo và mở thiết kế bài giảng.</p>
         <label htmlFor="username">Tên đăng nhập</label>

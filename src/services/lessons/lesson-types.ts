@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { coerceLayout, foldLayoutText, type SlideLayout } from "./layout-catalog";
 import { coerceAnimation, coerceTransition, type MotionAnimation, type MotionTransition } from "./motion-catalog";
 
@@ -13,6 +14,17 @@ export {
 } from "./motion-catalog";
 
 export type VocabItem = { en: string; vi: string; example?: string };
+
+export type SlideElementBox = {
+  x?: number;
+  y?: number;
+  w?: number;
+  text_vi?: string;
+  text_en?: string;
+  parts?: Record<string, string>;
+};
+
+export type SlideElements = Record<string, SlideElementBox>;
 
 export type SlideChoice = {
   vi: string;
@@ -42,17 +54,36 @@ export type LessonSlide = {
   image_url?: string | null;
   image_x: number;
   image_y: number;
+  elements: SlideElements;
 };
 
 export type GraphNode = { id: string; label: string; type: string };
 export type GraphEdge = { from: string; to: string; label: string };
 
+export type TimeTravelOption = {
+  id: string;
+  textVi: string;
+  textEn: string;
+};
+
+export type TimeTravelQuestion = {
+  id: string;
+  order: number;
+  contextVi: string;
+  contextEn: string;
+  questionVi: string;
+  questionEn: string;
+  options: TimeTravelOption[];
+  correctOptionId: string;
+  historicalOutcomeVi: string;
+  historicalOutcomeEn: string;
+  incorrectChoiceResponseVi: string;
+  incorrectChoiceResponseEn: string;
+  sourceEvidence: string;
+};
+
 export type Mission = {
-  scene_vi: string;
-  scene_en: string;
-  question_vi: string;
-  question_en: string;
-  choices: SlideChoice[];
+  questions: TimeTravelQuestion[];
 };
 
 export type HistoryChallenge = {
@@ -70,7 +101,7 @@ export type Lesson = {
   warnings: string[];
   graph: { nodes: GraphNode[]; edges: GraphEdge[] };
   slides: LessonSlide[];
-  mission: Mission | null;
+  mission: Mission;
   ai_vs_history: HistoryChallenge[];
 };
 
@@ -104,18 +135,247 @@ function hasWords(value: string) {
   return value.replace(/[“”"'`\s]/g, "").length > 0;
 }
 
-function normalizeMission(value: unknown): Mission | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+function readElements(value: unknown): SlideElements {
+  const source = asRecord(value);
+  const elements: SlideElements = {};
+  for (const [key, item] of Object.entries(source)) {
+    if (!/^[a-z0-9-]{1,40}$/.test(key)) continue;
+    const box = asRecord(item);
+    const next: SlideElementBox = {};
+    if (typeof box.x === "number" && Number.isFinite(box.x)) next.x = box.x;
+    if (typeof box.y === "number" && Number.isFinite(box.y)) next.y = box.y;
+    if (typeof box.w === "number" && Number.isFinite(box.w)) next.w = box.w;
+    const textVi = text(box.text_vi);
+    const textEn = text(box.text_en);
+    if (textVi) next.text_vi = textVi;
+    if (textEn) next.text_en = textEn;
+    const partsIn = asRecord(box.parts);
+    const parts: Record<string, string> = {};
+    for (const [part, partValue] of Object.entries(partsIn)) {
+      if (!/^[a-z0-9-]{1,24}$/.test(part)) continue;
+      const plain = text(partValue);
+      if (plain) parts[part] = plain;
+    }
+    if (Object.keys(parts).length > 0) next.parts = parts;
+    if (next.x == null && next.y == null && !next.text_vi && !next.text_en && !next.parts) continue;
+    elements[key] = next;
+  }
+  return elements;
+}
+
+const TIME_TRAVEL_LIMIT = 3;
+const TIME_TRAVEL_DROP_WARNING =
+  "Một số câu Time Travel không đúng cấu trúc hoặc không đủ dữ kiện được tư liệu hỗ trợ nên đã được bỏ. Hệ thống không tự thêm dữ kiện lịch sử.";
+
+const FORBIDDEN_MISSION_KEYS = new Set([
+  "consequence_vi",
+  "consequence_en",
+  "consequenceVi",
+  "consequenceEn",
+  "hypothetical",
+  "hypothetical_vi",
+  "hypothetical_en",
+  "hypotheticalVi",
+  "hypotheticalEn",
+  "alternative",
+  "alternative_history",
+  "alternativeHistory",
+  "what_if",
+  "whatIf",
+  "counterfactual",
+  "counterfactual_vi",
+  "counterfactual_en",
+  "counterfactualVi",
+  "counterfactualEn",
+]);
+
+const timeTravelOptionSchema = z.object({
+  id: z.string().min(1),
+  textVi: z.string().min(1),
+  textEn: z.string().min(1),
+});
+
+const timeTravelQuestionSchema = z
+  .object({
+    id: z.string().min(1),
+    order: z.number().int().positive(),
+    contextVi: z.string().min(1),
+    contextEn: z.string().min(1),
+    questionVi: z.string().min(1),
+    questionEn: z.string().min(1),
+    options: z.tuple([timeTravelOptionSchema, timeTravelOptionSchema]),
+    correctOptionId: z.string().min(1),
+    historicalOutcomeVi: z.string().min(1),
+    historicalOutcomeEn: z.string().min(1),
+    incorrectChoiceResponseVi: z.string(),
+    incorrectChoiceResponseEn: z.string(),
+    sourceEvidence: z.string().min(1),
+  })
+  .superRefine((question, ctx) => {
+    const ids = question.options.map((option) => option.id);
+    if (new Set(ids).size !== ids.length || !ids.includes(question.correctOptionId)) {
+      ctx.addIssue({ code: "custom", message: "correctOptionId" });
+    }
+    const [first, second] = question.options;
+    if (first.textVi === second.textVi && first.textEn === second.textEn) {
+      ctx.addIssue({ code: "custom", message: "options" });
+    }
+    const responseVi = question.incorrectChoiceResponseVi.trim();
+    const responseEn = question.incorrectChoiceResponseEn.trim();
+    if (Boolean(responseVi) !== Boolean(responseEn)) {
+      ctx.addIssue({ code: "custom", message: "incorrectChoiceResponse" });
+    }
+    if (
+      hasCounterfactual(responseVi) ||
+      hasCounterfactual(responseEn) ||
+      hasVerdictLabel(responseVi) ||
+      hasVerdictLabel(responseEn) ||
+      hasVerdictLabel(question.historicalOutcomeVi) ||
+      hasVerdictLabel(question.historicalOutcomeEn)
+    ) {
+      ctx.addIssue({ code: "custom", message: "response" });
+    }
+  });
+
+function hasCounterfactual(value: string) {
+  const sample = value.toLocaleLowerCase("vi");
+  return [
+    "sẽ xảy ra",
+    "sẽ không",
+    "lẽ ra",
+    "giả sử",
+    "dòng lịch sử khác",
+    "lịch sử thay thế",
+    "nếu chọn",
+    "nếu em",
+    "nếu bạn",
+    "what if",
+    "would have",
+    "would not",
+    "if you had",
+    "if they had",
+  ].some((phrase) => sample.includes(phrase));
+}
+
+function hasVerdictLabel(value: string) {
+  return /^\s*(sai|đúng|chưa chính xác|đáp án sai|incorrect|wrong|not correct)\b/i.test(value);
+}
+
+function readAlias(row: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    if (key in row) return text(row[key]);
+  }
+  return "";
+}
+
+function forbiddenMissionContent(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  if (Array.isArray(value)) return value.some(forbiddenMissionContent);
+  return Object.entries(value).some(([key, child]) => {
+    if (FORBIDDEN_MISSION_KEYS.has(key) && hasWords(text(child))) return true;
+    return forbiddenMissionContent(child);
+  });
+}
+
+function projectTimeTravelQuestion(value: unknown, index: number) {
+  if (forbiddenMissionContent(value)) return null;
+  const row = asRecord(value);
+  if (!Array.isArray(row.options) || row.options.length !== 2) return null;
+  const options = row.options.map((option) => {
+    const item = asRecord(option);
+    return {
+      id: readAlias(item, ["id"]),
+      textVi: readAlias(item, ["textVi", "text_vi"]),
+      textEn: readAlias(item, ["textEn", "text_en"]),
+    };
+  });
+  const orderValue = row.order;
+  const order = typeof orderValue === "number" && Number.isInteger(orderValue) && orderValue > 0 ? orderValue : index + 1;
+  return {
+    id: readAlias(row, ["id"]) || `tt-${order}`,
+    order,
+    contextVi: readAlias(row, ["contextVi", "context_vi"]),
+    contextEn: readAlias(row, ["contextEn", "context_en"]),
+    questionVi: readAlias(row, ["questionVi", "question_vi"]),
+    questionEn: readAlias(row, ["questionEn", "question_en"]),
+    options,
+    correctOptionId: readAlias(row, ["correctOptionId", "correct_option_id"]),
+    historicalOutcomeVi: readAlias(row, ["historicalOutcomeVi", "historical_outcome_vi"]),
+    historicalOutcomeEn: readAlias(row, ["historicalOutcomeEn", "historical_outcome_en"]),
+    incorrectChoiceResponseVi: readAlias(row, ["incorrectChoiceResponseVi", "incorrect_choice_response_vi"]),
+    incorrectChoiceResponseEn: readAlias(row, ["incorrectChoiceResponseEn", "incorrect_choice_response_en"]),
+    sourceEvidence: readAlias(row, ["sourceEvidence", "source_evidence"]),
+  };
+}
+
+function rawTimeTravelQuestions(value: unknown) {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object") return [];
   const mission = asRecord(value);
-  const choices = (Array.isArray(mission.choices) ? mission.choices.map(asChoice) : []).filter(
-    (choice) => hasWords(choice.vi) || hasWords(choice.en),
-  );
-  const scene_vi = text(mission.scene_vi);
-  const scene_en = text(mission.scene_en);
-  const question_vi = text(mission.question_vi);
-  const question_en = text(mission.question_en);
-  if (![scene_vi, scene_en, question_vi, question_en].some(hasWords) && choices.length === 0) return null;
-  return { scene_vi, scene_en, question_vi, question_en, choices };
+  return Array.isArray(mission.questions) ? mission.questions : [];
+}
+
+function legacyMissionAttempt(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const mission = asRecord(value);
+  if (Array.isArray(mission.questions)) return false;
+  return ["scene_vi", "scene_en", "question_vi", "question_en", "choices"].some((key) => {
+    const child = mission[key];
+    if (typeof child === "string") return hasWords(child);
+    return Array.isArray(child) && child.length > 0;
+  });
+}
+
+function normalizeMission(value: unknown, warnings: string[]): Mission {
+  const raw = rawTimeTravelQuestions(value);
+  const parsed = raw.flatMap((item, index) => {
+    const projected = projectTimeTravelQuestion(item, index);
+    if (!projected) return [];
+    const result = timeTravelQuestionSchema.safeParse(projected);
+    if (!result.success) return [];
+    const question = result.data;
+    return [
+      {
+        ...question,
+        options: question.options.map((option) => ({ ...option })),
+      } satisfies TimeTravelQuestion,
+    ];
+  });
+  parsed.sort((a, b) => a.order - b.order);
+  const limited = parsed.slice(0, TIME_TRAVEL_LIMIT);
+  const dropped = raw.length - parsed.length + Math.max(0, parsed.length - TIME_TRAVEL_LIMIT);
+  const rejected = dropped > 0 || legacyMissionAttempt(value);
+  const questions = limited.map((question, index) => {
+    const order = index + 1;
+    const duplicate = limited.some((item, itemIndex) => itemIndex !== index && item.id === question.id);
+    return { ...question, id: duplicate ? `${question.id}-${order}` : question.id, order };
+  });
+  if (rejected && !warnings.includes(TIME_TRAVEL_DROP_WARNING)) warnings.push(TIME_TRAVEL_DROP_WARNING);
+  return { questions };
+}
+
+const SOURCE_FRAME = [
+  /^(?:như\s+|theo\s+)?(?:tư liệu|tài liệu)(?:\s+đã)?(?:\s+(?:được\s+)?(?:nêu rõ|nêu|cho biết|ghi nhận|ghi|kiểm chứng|xác nhận|chứng minh))+(?:\s+rằng|\s+là)?\s*[:,]?\s*/i,
+  /^(?:theo\s+)?(?:tư liệu|tài liệu)(?:\s+đã\s+kiểm chứng|\s+đã\s+nêu)?\s*[:,]?\s*/i,
+  /^(?:the\s+)?(?:verified\s+)?sources?\s+(?:indicate|state|show|say|confirm|note)(?:\s+that)?\s*/i,
+  /^according to the (?:verified\s+)?(?:source|document|text)s?\s*,?\s*(?:that\s+)?/i,
+];
+
+function stripSourceFrame(value: string) {
+  let next = value.trim();
+  let changed = true;
+  while (next && changed) {
+    changed = false;
+    for (const pattern of SOURCE_FRAME) {
+      const stripped = next.replace(pattern, "").trim();
+      if (stripped && stripped !== next) {
+        next = stripped;
+        changed = true;
+      }
+    }
+  }
+  if (!next) return value.trim();
+  return next.charAt(0).toLocaleUpperCase("vi") + next.slice(1);
 }
 
 function normalizeChallenges(value: unknown): HistoryChallenge[] {
@@ -128,8 +388,8 @@ function normalizeChallenges(value: unknown): HistoryChallenge[] {
         statement_vi: text(row.statement_vi),
         statement_en: text(row.statement_en),
         answer: answer === "fact" || answer === "interpretation" ? answer : "unsupported",
-        explanation_vi: text(row.explanation_vi),
-        explanation_en: text(row.explanation_en),
+        explanation_vi: stripSourceFrame(text(row.explanation_vi)),
+        explanation_en: stripSourceFrame(text(row.explanation_en)),
       } satisfies HistoryChallenge;
     })
     .filter((item) => hasWords(item.statement_vi) || hasWords(item.statement_en));
@@ -159,10 +419,13 @@ export function normalizeSlide(value: unknown, index: number): LessonSlide {
     vocab,
     question_vi: text(slide.question_vi),
     question_en: text(slide.question_en),
-    choices: Array.isArray(slide.choices) ? slide.choices.map(asChoice) : [],
+    choices: Array.isArray(slide.choices)
+      ? slide.choices.map(asChoice).filter((choice) => hasWords(choice.vi) || hasWords(choice.en))
+      : [],
     image_url: text(slide.image_url) || null,
     image_x: typeof slide.image_x === "number" ? slide.image_x : 72,
     image_y: typeof slide.image_y === "number" ? slide.image_y : 62,
+    elements: readElements(slide.elements),
   };
 }
 
@@ -175,13 +438,16 @@ export function normalizeLesson(value: unknown): Lesson {
     throw new Error("Bài giảng chưa có slide.");
   }
 
+  const warnings = Array.isArray(lesson.warnings)
+    ? lesson.warnings.filter((item): item is string => typeof item === "string").map((item) => text(item)).filter(Boolean)
+    : [];
+  const mission = normalizeMission(lesson.mission, warnings);
+
   return {
     id: text(lesson.id) || undefined,
     title_vi: text(lesson.title_vi, slides[0]?.title_vi || "Bài giảng"),
     title_en: text(lesson.title_en),
-    warnings: Array.isArray(lesson.warnings)
-      ? lesson.warnings.filter((item): item is string => typeof item === "string").map((item) => text(item)).filter(Boolean)
-      : [],
+    warnings,
     graph: {
       nodes: Array.isArray(graph.nodes)
         ? graph.nodes
@@ -199,7 +465,7 @@ export function normalizeLesson(value: unknown): Lesson {
         : [],
     },
     slides,
-    mission: normalizeMission(lesson.mission),
+    mission,
     ai_vs_history: normalizeChallenges(lesson.ai_vs_history),
   };
 }

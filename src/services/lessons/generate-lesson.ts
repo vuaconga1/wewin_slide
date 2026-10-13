@@ -25,14 +25,20 @@ export type GenerateRequest = {
   files: File[];
 };
 
-const SYSTEM = `Bạn là chuyên gia Lịch sử Việt Nam, CLIL và thiết kế bài giảng song ngữ Anh–Việt. Chỉ dùng thông tin trong TƯ LIỆU. Không tự thêm dữ kiện lịch sử. Không mô tả hay gắn hình ảnh bằng AI Vision. Không OCR. Không tạo ghi chú giảng dạy. Không tạo câu trích khóa nguồn. Không trả teacher_notes, source_quote hay source_ok. Trả JSON hợp lệ, không markdown, không HTML, không CSS.
+export const LESSON_SYSTEM_PROMPT = `Bạn là chuyên gia Lịch sử Việt Nam, CLIL và thiết kế bài giảng song ngữ Anh–Việt. Chỉ dùng thông tin trong TƯ LIỆU. Không tự thêm dữ kiện lịch sử. Không mô tả hay gắn hình ảnh bằng AI Vision. Không OCR. Không tạo ghi chú giảng dạy. Không tạo câu trích khóa nguồn. Không trả teacher_notes, source_quote hay source_ok. Trả JSON hợp lệ, không markdown, không HTML, không CSS.
 Tạo đúng số slide giáo viên yêu cầu, từ 3 đến 30.
 ${layoutInstruction()}
 ${motionInstruction()}
-Mỗi slide có tiêu đề song ngữ và thân bài song ngữ đúng dạng layout đã chọn. vocab chỉ khi layout là vocab. question và choices chỉ khi layout là quiz.
+Mỗi slide có tiêu đề song ngữ và thân bài song ngữ đúng dạng layout đã chọn. vocab chỉ khi layout là vocab. Không dùng layout quiz. Không tạo câu trắc nghiệm trên slide. choices của mọi slide là []. Không tạo phần tử choice, kể cả object có vi hoặc en rỗng. question_vi và question_en chỉ dùng cho layout summary khi tư liệu gợi một câu suy ngẫm; mọi layout khác để hai trường này là "".
+Mỗi slide phải mang nhiều ý từ phần tư liệu dành cho slide đó: đoạn thân bài, nhiều mốc, nhiều ý nguyên nhân – diễn biến – hệ quả hoặc nhiều điểm so sánh khi tư liệu có các ý đó. Không dừng ở một dòng nếu tư liệu còn câu phù hợp chưa đưa vào slide. Không bịa sự kiện, ngày tháng, nhân vật, địa điểm hay quan hệ nhân quả để lấp chỗ trống. Nếu tư liệu ngắn hơn số slide, chia các câu có sẵn ra đúng số slide, không thêm nội dung ngoài tư liệu.
 Tiếng Anh viết lại đúng CEFR, không dịch từng chữ. Tên riêng giữ tiếng Việt. Trường type để cùng giá trị với layout.
-Khi tư liệu có nhân vật, mốc thời gian, địa điểm hoặc một quyết định, phải điền graph, mission và ai_vs_history từ TƯ LIỆU trong cùng JSON này. mission là một cảnh quyết định: scene_vi, scene_en, question_vi, question_en, và ít nhất hai choices có vi, en, historical, consequence_vi, consequence_en. ai_vs_history có câu statement_vi, statement_en, answer (fact, interpretation hoặc unsupported), explanation_vi, explanation_en. graph có nút person, event, time, place, cause, decision, consequence và cạnh nối các nút đó. Chỉ để graph.nodes rỗng, mission null và ai_vs_history rỗng khi tư liệu quá ngắn, không đủ một sự kiện. Không bịa dữ kiện ngoài tư liệu. Thân slide để rỗng nếu không có câu trong tư liệu để điền.
-JSON: {"title_vi":"","title_en":"","warnings":[],"graph":{"nodes":[{"id":"","label":"","type":"person|event|time|place|cause|decision|consequence"}],"edges":[{"from":"","to":"","label":""}]},"slides":[{"layout":"context","type":"context","animation":"rise","transition":"fade","title_vi":"","title_en":"","body_vi":"","body_en":"","vocab":[{"en":"","vi":"","example":""}],"question_vi":"","question_en":"","choices":[{"vi":"","en":"","correct":false,"feedback_vi":"","feedback_en":""}]}],"mission":{"scene_vi":"","scene_en":"","question_vi":"","question_en":"","choices":[{"vi":"","en":"","historical":false,"consequence_vi":"","consequence_en":""}]},"ai_vs_history":[{"statement_vi":"","statement_en":"","answer":"fact|interpretation|unsupported","explanation_vi":"","explanation_en":""}]}`;
+Khi tư liệu có nhân vật, mốc thời gian, địa điểm hoặc một quyết định, phải điền graph, mission và ai_vs_history từ TƯ LIỆU trong cùng JSON này. ai_vs_history có câu statement_vi, statement_en, answer (fact, interpretation hoặc unsupported), explanation_vi, explanation_en. explanation chỉ nêu thẳng nội dung lịch sử. Không mở đầu bằng Tư liệu nêu rõ, Tài liệu đã nêu, Tài liệu đã kiểm chứng, Theo tư liệu, The source says hay The sources indicate.
+graph có nút person, event, time, place, cause, decision, consequence và cạnh nối. Khi tư liệu đủ dữ kiện, tạo khoảng 6 đến 12 nút, tối đa 16, gồm các nhân vật, mốc thời gian, địa điểm, nguyên nhân, quyết định và hệ quả có trong tư liệu. Không dừng ở 1 hoặc 2 nút nếu tư liệu còn các dữ kiện đó. Không bịa nút ngoài tư liệu.
+Time Travel nằm trong mission.questions, tối đa 3 câu, về 3 quyết định hoặc mốc rẽ khác nhau. Mỗi câu là một quyết định đã xảy ra để học sinh chọn hành động. Không tạo nhánh lịch sử thay thế. Không lặp cùng một quyết định. Nếu tư liệu có từ 3 mốc rẽ được ghi nhận thì trả đủ 3 câu. Chỉ trả 1 hoặc 2 câu khi tư liệu thật sự không còn quyết định tiếp theo. Chỉ để questions là [] khi tư liệu không có quyết định nào gắn với kết quả được ghi nhận, và khi đó thêm một cảnh báo vào warnings. Không đoán. Không bịa sự kiện, ngày tháng, nhân vật, lời thoại, động cơ hay quan hệ nhân quả.
+Mỗi câu có id, order, contextVi, contextEn, questionVi, questionEn, options đúng 2 phần tử với id, textVi, textEn, correctOptionId trùng id của một lựa chọn, historicalOutcomeVi, historicalOutcomeEn, incorrectChoiceResponseVi, incorrectChoiceResponseEn, sourceEvidence. correctOptionId là lựa chọn đúng, tức hành động hoặc hướng đi được tư liệu ghi nhận. Lựa chọn còn lại chỉ gây nhiễu, vẫn liên quan đến bối cảnh. Câu hỏi chỉ yêu cầu chọn hành động. Không gọi lựa chọn đúng là nguyên nhân nếu tư liệu không nói đó là nguyên nhân. Không viết hệ quả cho lựa chọn sai.
+historicalOutcome chỉ nêu diễn biến hoặc kết quả thật gắn với lựa chọn đúng. incorrectChoiceResponse là câu hiện khi chọn sai: nếu tư liệu chứng minh lựa chọn đúng gắn với kết quả, viết một câu ngắn phủ định trực tiếp kết quả ấy. Nếu tư liệu không chứng minh quan hệ nhân quả, để cả hai incorrectChoiceResponse là chuỗi rỗng. Không viết điều sẽ xảy ra nếu chọn phương án kia. Không viết Sai, Đúng, Chưa chính xác hay Đáp án sai. sourceEvidence là dữ kiện hoặc trích đoạn trong tư liệu hỗ trợ kết quả. Không thêm trường consequence, hypothetical, what_if.
+Tiếng Anh của Time Travel theo CEFR đã chọn. Tên riêng giữ nguyên. Chỉ để graph.nodes rỗng, mission.questions rỗng và ai_vs_history rỗng khi tư liệu không có một sự kiện có thể kiểm chứng. Độ dài ngắn không phải lý do để bỏ Time Travel nếu tư liệu đã có quyết định và kết quả. Không bịa dữ kiện ngoài tư liệu. Thân slide để rỗng nếu không có câu trong tư liệu để điền.
+JSON: {"title_vi":"","title_en":"","warnings":[],"graph":{"nodes":[{"id":"","label":"","type":"person|event|time|place|cause|decision|consequence"}],"edges":[{"from":"","to":"","label":""}]},"slides":[{"layout":"context","type":"context","animation":"rise","transition":"fade","title_vi":"","title_en":"","body_vi":"","body_en":"","vocab":[],"question_vi":"","question_en":"","choices":[]}],"mission":{"questions":[{"id":"tt1","order":1,"contextVi":"","contextEn":"","questionVi":"","questionEn":"","options":[{"id":"a","textVi":"","textEn":""},{"id":"b","textVi":"","textEn":""}],"correctOptionId":"a","historicalOutcomeVi":"","historicalOutcomeEn":"","incorrectChoiceResponseVi":"","incorrectChoiceResponseEn":"","sourceEvidence":""}]},"ai_vs_history":[{"statement_vi":"","statement_en":"","answer":"fact|interpretation|unsupported","explanation_vi":"","explanation_en":""}]}`;
 
 function splitChunks(source: string, count: number) {
   const clean = source.replace(/\s+/g, " ").trim();
@@ -64,7 +70,6 @@ function layoutFor(index: number, total: number, template: string): SlideLayout 
     "comparison",
     "quote",
     "vocab",
-    "quiz",
   ];
   return middle[(index - 1) % middle.length] ?? "context";
 }
@@ -93,30 +98,13 @@ function draftLesson(request: GenerateRequest, source: string, warnings: string[
         ? "English wording is added when an AI key is configured. The Vietnamese text stays with the source."
         : "",
       vocab: [],
-      question_vi: layout === "quiz" && chunk ? "Câu nào có trong tư liệu vừa đọc?" : "",
-      question_en: layout === "quiz" && chunk ? "Which statement is supported by the source?" : "",
-      choices:
-        layout === "quiz" && chunk
-          ? [
-              {
-                vi: "Đối chiếu với câu trong tư liệu",
-                en: "Check the sentence in the source",
-                correct: true,
-                feedback_vi: "Kết luận cần bám vào nguồn.",
-                feedback_en: "A conclusion should stay with the source.",
-              },
-              {
-                vi: "Thêm một dữ kiện không có trong nguồn",
-                en: "Add a fact that is not in the source",
-                correct: false,
-                feedback_vi: "Không thêm dữ kiện ngoài tư liệu.",
-                feedback_en: "Do not add facts beyond the source.",
-              },
-            ]
-          : [],
+      question_vi: "",
+      question_en: "",
+      choices: [],
       image_url: null,
       image_x: 72,
       image_y: 62,
+      elements: {},
     };
   });
 
@@ -141,30 +129,7 @@ function draftLesson(request: GenerateRequest, source: string, warnings: string[
       })),
     },
     slides,
-    mission: sentence
-      ? {
-          scene_vi: sentence,
-          scene_en: "",
-          question_vi: "Em sẽ làm gì trước khi kết luận?",
-          question_en: "What will you do before concluding?",
-          choices: [
-            {
-              vi: "Tìm câu chứng minh trong tư liệu",
-              en: "Find a supporting sentence in the source",
-              historical: true,
-              consequence_vi: "Em kiểm chứng trước khi kết luận.",
-              consequence_en: "You checked the source before concluding.",
-            },
-            {
-              vi: "Kết luận khi chưa đọc nguồn",
-              en: "Conclude before reading the source",
-              historical: false,
-              consequence_vi: "Kết luận chưa có bằng chứng.",
-              consequence_en: "The conclusion does not have evidence yet.",
-            },
-          ],
-        }
-      : null,
+    mission: { questions: [] },
     ai_vs_history: sentence
       ? [
           {
@@ -195,9 +160,11 @@ Thời lượng: ${request.duration} phút
 Số slide bắt buộc: ${request.count}
 ${isLayout(request.template) ? `Template ưu tiên: ${request.template}. Dùng layout này cho các slide giữa. Slide đầu nên là title, slide cuối nên là summary. Chỉ điền chữ vào layout có sẵn.` : "Template ưu tiên: auto. Tự chọn layout trong danh sách cố định. Slide đầu nên là title, slide cuối nên là summary."}
 Ghi chú giáo viên: ${request.notes}
+Mỗi slide điền đủ câu trong phần tư liệu của slide đó. Không để thân bài là một dòng khi tư liệu còn câu chưa dùng. Không bịa để lấp khoảng trống. Không tạo slide quiz và không tạo choices.
+Nếu tư liệu có ít nhất một quyết định đã xảy ra và kết quả được ghi nhận, mission.questions phải có câu bám đúng dữ kiện đó. Nếu có từ 3 quyết định hoặc mốc rẽ khác nhau thì trả đủ 3 câu, mỗi câu một thời điểm. Knowledge Graph điền các nhân vật, mốc, địa điểm, nguyên nhân, quyết định và hệ quả có trong tư liệu, không dừng ở 2 nút. Giải thích AI vs History nêu thẳng nội dung, không viết Tư liệu nêu rõ hay The sources indicate.
 TƯ LIỆU:
 """
-${source || "(Không có tư liệu. Không bịa nội dung. body_vi và body_en để rỗng, graph.nodes để [], mission để null, ai_vs_history để [].)"}
+${source || "(Không có tư liệu. Không bịa nội dung. body_vi và body_en để rỗng, graph.nodes để [], mission.questions để [], ai_vs_history để [].)"}
 """`;
 }
 
@@ -229,7 +196,7 @@ async function completeOpenAI(request: GenerateRequest, source: string, tokens: 
     max_completion_tokens: tokens,
     response_format: { type: "json_object" },
     messages: [
-      { role: "system", content: SYSTEM },
+      { role: "system", content: LESSON_SYSTEM_PROMPT },
       { role: "user", content: lessonPrompt(request, source) },
     ],
   };
@@ -287,7 +254,7 @@ async function generateWithModel(request: GenerateRequest, source: string) {
     body: JSON.stringify({
       model: process.env.MODEL || "claude-sonnet-4-5-20250929",
       max_tokens: request.count > 15 ? 12000 : 9000,
-      system: SYSTEM,
+      system: LESSON_SYSTEM_PROMPT,
       messages: [{ role: "user", content: user }],
     }),
   });
@@ -299,6 +266,34 @@ async function generateWithModel(request: GenerateRequest, source: string) {
   const raw = (data.content ?? []).filter((block) => block.type === "text").map((block) => block.text ?? "").join("");
   if (!raw.trim()) throw new Error("AI không trả nội dung.");
   return normalizeLesson(parseModelJson(raw));
+}
+
+function joinExtra(body: string, extra: string) {
+  const next = extra.trim();
+  if (!next || body.includes(next)) return body;
+  return [body.trim(), next].filter(Boolean).join("\n");
+}
+
+export function settleGeneratedSlides(lesson: Lesson): Lesson {
+  return {
+    ...lesson,
+    slides: lesson.slides.map((slide) => {
+      const quiz = slide.layout === "quiz";
+      const layout = quiz ? "summary" : slide.layout;
+      const keepQuestion = layout === "summary" && !quiz;
+      return {
+        ...slide,
+        layout,
+        type: layout,
+        body_vi: quiz ? joinExtra(slide.body_vi, slide.question_vi) : slide.body_vi,
+        body_en: quiz ? joinExtra(slide.body_en, slide.question_en) : slide.body_en,
+        question_vi: keepQuestion ? slide.question_vi : "",
+        question_en: keepQuestion ? slide.question_en : "",
+        choices: [],
+        elements: slide.elements ?? {},
+      };
+    }),
+  };
 }
 
 function fitCount(lesson: Lesson, count: number) {
@@ -349,11 +344,22 @@ export async function generateLesson(request: GenerateRequest) {
       : draftLesson(request, extracted.text, [
           ...warnings,
           "Chưa có OPENAI_API_KEY. Hệ thống đã chia tư liệu thành đúng số slide và gán layout. Phần tiếng Anh sẽ được AI viết khi có API key.",
+          "Chưa tạo câu Time Travel vì không có khóa AI. Hệ thống không tự viết quyết định lịch sử.",
         ]);
 
   if (hasOpenAI || hasAnthropic) lesson.warnings = [...warnings, ...lesson.warnings];
 
-  const fitted = fillFromSource(fitCount(lesson, request.count), extracted.text);
+  const fitted = settleGeneratedSlides(fillFromSource(fitCount(lesson, request.count), extracted.text));
+  if (
+    (hasOpenAI || hasAnthropic) &&
+    fitted.mission.questions.length === 0 &&
+    extracted.text.trim().length >= 40 &&
+    !fitted.warnings.some((item) => /time travel/i.test(item))
+  ) {
+    fitted.warnings.push(
+      "Tư liệu chưa đủ một quyết định và kết quả lịch sử được xác nhận, nên không tạo câu Time Travel.",
+    );
+  }
   if (extracted.images[0] && fitted.slides[0]) {
     fitted.slides[0] = { ...fitted.slides[0], image_url: extracted.images[0] };
   }

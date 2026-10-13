@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -18,8 +19,7 @@ export function AppHeader({ user }: { user: { username: string; role: "ADMIN" | 
   return (
     <header>
       <Link className="brand" href="/">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/assets/wewin-logo.png" alt="WeWIN" />
+        <Image src="/assets/wewin-logo.png" alt="WeWIN" width={166} height={42} priority sizes="166px" />
         <div>
           <b>WEWIN AI HISTORY LAB™</b>
           <div style={{ fontSize: 12, opacity: 0.8 }}>Verified Sources → Interactive History</div>

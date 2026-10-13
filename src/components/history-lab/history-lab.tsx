@@ -1,11 +1,14 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { downloadLessonPdf } from "@/components/history-lab/download-pdf";
 import { GraphView, MissionView, ReportView, SourceGap, VerifyView } from "@/components/history-lab/history-views";
 import { SlideCard } from "@/components/history-lab/slide-card";
+import { positionsOnly } from "@/services/lessons/slide-elements";
 import { LAYOUT_CATALOG, type Lesson, type LessonSlide, type SlideLayout } from "@/services/lessons/lesson-types";
+import { sectionPages } from "@/services/lessons/section-export";
 
 type Lang = "vi" | "both" | "en";
 type View = "lesson" | "graph" | "mission" | "verify" | "report";
@@ -34,23 +37,40 @@ const TABS: { id: View; label: string }[] = [
   { id: "report", label: "Learning Analytics" },
 ];
 
-async function exportPptx(lesson: Lesson) {
+async function exportPptx(lesson: Lesson, section: View) {
   const { default: PptxGenJS } = await import("pptxgenjs");
   const pptx = new PptxGenJS();
   pptx.layout = "LAYOUT_WIDE";
-  lesson.slides.forEach((slide) => {
-    const page = pptx.addSlide();
-    page.background = { color: "0A3470" };
-    page.addText(slide.title_vi || "", {
-      x: 0.6, y: 0.4, w: 12, h: 0.6, fontSize: 30, bold: true, color: "FFFFFF",
+  if (section === "lesson") {
+    lesson.slides.forEach((slide) => {
+      const page = pptx.addSlide();
+      page.background = { color: "0A3470" };
+      page.addText(slide.title_vi || "", {
+        x: 0.6, y: 0.4, w: 12, h: 0.6, fontSize: 30, bold: true, color: "FFFFFF",
+      });
+      page.addText(slide.title_en || "", {
+        x: 0.6, y: 1.05, w: 12, h: 0.4, fontSize: 17, color: "FFD98B",
+      });
+      page.addText(`${slide.body_vi || ""}\n${slide.body_en || ""}`, {
+        x: 0.6, y: 1.7, w: 12, h: 3.7, fontSize: 18, color: "FFFFFF",
+      });
     });
-    page.addText(slide.title_en || "", {
-      x: 0.6, y: 1.05, w: 12, h: 0.4, fontSize: 17, color: "FFD98B",
-    });
-    page.addText(`${slide.body_vi || ""}\n${slide.body_en || ""}`, {
-      x: 0.6, y: 1.7, w: 12, h: 3.7, fontSize: 18, color: "FFFFFF",
-    });
-  });
+  } else {
+    for (const lines of sectionPages(lesson, section)) {
+      const page = pptx.addSlide();
+      page.background = { color: "0A3470" };
+      const [kicker, title, ...rest] = lines;
+      page.addText(kicker || "", {
+        x: 0.55, y: 0.35, w: 12.2, h: 0.35, fontSize: 14, bold: true, color: "FFD98B",
+      });
+      page.addText(title || "", {
+        x: 0.55, y: 0.75, w: 12.2, h: 0.6, fontSize: 28, bold: true, color: "FFFFFF",
+      });
+      page.addText(rest.join("\n\n"), {
+        x: 0.55, y: 1.55, w: 12.2, h: 5.4, fontSize: 18, color: "FFFFFF", valign: "top",
+      });
+    }
+  }
   await pptx.writeFile({ fileName: "WEWIN-AI-History-Lab.pptx" });
 }
 
@@ -106,10 +126,14 @@ export function HistoryLab({
   const [pageMenu, setPageMenu] = useState<{ x: number; y: number } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const filmRef = useRef<HTMLDivElement>(null);
+  const saveTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 30000);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearInterval(timer);
+      if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+    };
   }, []);
 
   function startPresent() {
@@ -315,7 +339,13 @@ export function HistoryLab({
     const slides = lesson.slides.map((item, slideIndex) => (slideIndex === index ? { ...item, ...patch } : item));
     const next = { ...lesson, slides };
     setLesson(next);
-    if (save) void persist(next);
+    if (save) {
+      if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = window.setTimeout(() => {
+        saveTimerRef.current = null;
+        void persist(next);
+      }, 250);
+    }
   }
 
   useEffect(() => {
@@ -355,6 +385,7 @@ export function HistoryLab({
       vocab: [],
       question_vi: "",
       question_en: "",
+      elements: {},
     };
   }
 
@@ -426,7 +457,7 @@ export function HistoryLab({
             </summary>
             <div className="download-list">
               <button type="button" disabled={!lesson} onClick={() => void onPdf()}>PDF</button>
-              <button type="button" disabled={!lesson || !lessonHasMaterial} onClick={() => lesson && void exportPptx(lesson)}>PowerPoint</button>
+              <button type="button" disabled={!lesson} onClick={() => lesson && void exportPptx(lesson, view)}>PowerPoint</button>
             </div>
           </details>
           <button type="button" className="btn primary" onClick={startPresent} disabled={!lesson} title="F5">
@@ -449,8 +480,7 @@ export function HistoryLab({
               gian” và thử thách kiểm chứng AI bằng bằng chứng.
             </p>
           </div>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="mascot" src="/assets/wewin-mascot.png" alt="" />
+          <Image className="mascot" src="/assets/wewin-mascot.png" alt="" width={220} height={132} sizes="220px" />
         </div>
       </section>
       <div className="tabs">
@@ -574,7 +604,7 @@ export function HistoryLab({
           ) : view === "graph" ? (
             <GraphView lesson={lesson} />
           ) : view === "mission" ? (
-            <MissionView key={lesson.id ?? "mission"} lesson={lesson} lang={lang} />
+            <MissionView key={lesson.id ?? "mission"} lesson={lesson} lang={lang} onLang={setLang} />
           ) : view === "verify" ? (
             <VerifyView key={lesson.id ?? "verify"} lesson={lesson} lang={lang} />
           ) : view === "report" ? (
@@ -608,9 +638,10 @@ export function HistoryLab({
                 index={index}
                 lang={lang}
                 answered={answered[index]}
-                onAnswer={(choice) => setAnswered((current) => ({ ...current, [index]: choice }))}
                 editableImage={editing}
                 onImageMove={(x, y) => patchSlide({ image_x: x, image_y: y })}
+                arrange
+                onSlideChange={(patch) => patchSlide(patch, true)}
               />
               <div className="film">
                 <div className="film-pages" ref={filmRef}>
@@ -686,20 +717,20 @@ export function HistoryLab({
                   <div className="row">
                     <label>
                       Tiêu đề Việt
-                      <input className="f" value={slide.title_vi} onChange={(event) => patchSlide({ title_vi: event.target.value })} onBlur={() => void persist(lesson)} />
+                      <input className="f" value={slide.title_vi} onChange={(event) => patchSlide({ title_vi: event.target.value, elements: positionsOnly(slide.elements) })} onBlur={() => void persist(lesson)} />
                     </label>
                     <label>
                       Tiêu đề Anh
-                      <input className="f" value={slide.title_en} onChange={(event) => patchSlide({ title_en: event.target.value })} onBlur={() => void persist(lesson)} />
+                      <input className="f" value={slide.title_en} onChange={(event) => patchSlide({ title_en: event.target.value, elements: positionsOnly(slide.elements) })} onBlur={() => void persist(lesson)} />
                     </label>
                   </div>
                   <label>
                     Nội dung Việt
-                    <textarea className="f" value={slide.body_vi} onChange={(event) => patchSlide({ body_vi: event.target.value })} onBlur={() => void persist(lesson)} />
+                    <textarea className="f" value={slide.body_vi} onChange={(event) => patchSlide({ body_vi: event.target.value, elements: positionsOnly(slide.elements) })} onBlur={() => void persist(lesson)} />
                   </label>
                   <label>
                     Nội dung Anh
-                    <textarea className="f" value={slide.body_en} onChange={(event) => patchSlide({ body_en: event.target.value })} onBlur={() => void persist(lesson)} />
+                    <textarea className="f" value={slide.body_en} onChange={(event) => patchSlide({ body_en: event.target.value, elements: positionsOnly(slide.elements) })} onBlur={() => void persist(lesson)} />
                   </label>
                   <div className="row">
                     <label>
@@ -709,9 +740,10 @@ export function HistoryLab({
                         value={slide.layout}
                         onChange={(event) => {
                           const layout = event.target.value as SlideLayout;
-                          patchSlide({ layout, type: layout }, true);
+                          patchSlide({ layout, type: layout, elements: {} }, true);
                         }}
                       >
+                        {slide.layout === "quiz" ? <option value="quiz">Câu hỏi nhanh</option> : null}
                         {LAYOUT_CATALOG.map((item) => (
                           <option key={item.id} value={item.id}>
                             {item.label}
@@ -776,6 +808,7 @@ export function HistoryLab({
                             image_url: null,
                             choices: [],
                             vocab: [],
+                            elements: {},
                           },
                           ...lesson.slides.slice(index + 1),
                         ];
@@ -816,13 +849,19 @@ export function HistoryLab({
             {view === "graph" ? (
               <GraphView lesson={lesson} />
             ) : view === "mission" ? (
-              <MissionView key={`present-${lesson.id ?? "mission"}`} lesson={lesson} lang={lang} />
+              <MissionView key={`present-${lesson.id ?? "mission"}`} lesson={lesson} lang={lang} onLang={setLang} />
             ) : view === "verify" ? (
               <VerifyView key={`present-${lesson.id ?? "verify"}`} lesson={lesson} lang={lang} />
             ) : view === "report" ? (
               <ReportView />
             ) : slide ? (
-              <SlideCard slide={slide} index={index} lang={lang} answered={answered[index]} />
+              <SlideCard
+                slide={slide}
+                index={index}
+                lang={lang}
+                answered={answered[index]}
+                onAnswer={(choice) => setAnswered((current) => ({ ...current, [index]: choice }))}
+              />
             ) : null}
           </div>
         </div>

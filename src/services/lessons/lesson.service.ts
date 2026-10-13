@@ -37,6 +37,7 @@ function slideData(slide: LessonSlide, order: number) {
     questionVi: slide.question_vi,
     questionEn: slide.question_en,
     choices: slide.choices as Prisma.InputJsonValue,
+    elements: (slide.elements ?? {}) as Prisma.InputJsonValue,
     sourceQuote: "",
     sourceOk: false,
     imageUrl: slide.image_url ?? null,
@@ -68,6 +69,7 @@ function fromRecord(record: {
     questionVi: string;
     questionEn: string;
     choices: Prisma.JsonValue;
+    elements: Prisma.JsonValue | null;
     imageUrl: string | null;
     imageX: number;
     imageY: number;
@@ -95,6 +97,7 @@ function fromRecord(record: {
         question_vi: slide.questionVi,
         question_en: slide.questionEn,
         choices: slide.choices,
+        elements: slide.elements,
         image_url: slide.imageUrl,
         image_x: slide.imageX,
         image_y: slide.imageY,
@@ -119,6 +122,7 @@ const include = {
       questionVi: true,
       questionEn: true,
       choices: true,
+      elements: true,
       imageUrl: true,
       imageX: true,
       imageY: true,
@@ -165,8 +169,13 @@ export const lessonService = {
   },
 
   async get(id: string, actor: SessionUser) {
-    await assertCanManage(id, actor);
-    const record = await prisma.lesson.findUnique({ where: { id }, include });
+    const record = await prisma.lesson.findFirst({
+      where: {
+        id,
+        ...(actor.role === "ADMIN" ? {} : { ownerId: actor.id }),
+      },
+      include,
+    });
     if (!record) throw new AppError("Không tìm thấy bài giảng.", "NOT_FOUND");
     return fromRecord(record);
   },

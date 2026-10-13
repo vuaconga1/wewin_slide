@@ -1,4 +1,4 @@
-import type { GraphEdge, GraphNode, HistoryChallenge, Lesson, Mission, SlideChoice } from "./lesson-types";
+import type { GraphEdge, GraphNode, HistoryChallenge, Lesson } from "./lesson-types";
 
 const ENOUGH = 280;
 
@@ -70,48 +70,6 @@ function graphFrom(source: string, title: string): { nodes: GraphNode[]; edges: 
   return { nodes, edges };
 }
 
-function choice(vi: string, historical: boolean, consequence: string): SlideChoice {
-  return {
-    vi: clip(vi, 140),
-    en: "",
-    historical,
-    consequence_vi: clip(consequence, 180),
-    consequence_en: "",
-  };
-}
-
-function missionFrom(source: string): Mission | null {
-  const scene =
-    source.match(/Sáng ngày[^.]{10,220}\./i)?.[0] ??
-    source.match(/Ngày\s+\d{1,2}\s+tháng\s+\d{1,2}\s+năm\s+\d{4}[^.]{10,220}\./i)?.[0] ??
-    "";
-  const first = source.match(/Việc thứ nhất[^:]*:\s*([^.]+)\.\s*Hệ quả[^.]{0,40}là\s+([^.]+)\./i);
-  const second = source.match(/Việc thứ hai[^:]*:\s*([^.]+)\.\s*Hệ quả[^.]{0,40}là\s+([^.]+)\./i);
-  if (scene && first?.[1] && first[2] && second?.[1] && second[2]) {
-    return {
-      scene_vi: clip(scene, 240),
-      scene_en: "",
-      question_vi: "Em chọn việc nào?",
-      question_en: "",
-      choices: [choice(first[1], true, first[2]), choice(second[1], false, second[2])],
-    };
-  }
-
-  const toFrance = /sang Pháp/i.test(source);
-  const notJapan = /không sang Nhật/i.test(source);
-  if (!scene || !toFrance || !notJapan) return null;
-  return {
-    scene_vi: clip(scene, 240),
-    scene_en: "",
-    question_vi: "Trong ngày ra đi, em chọn hướng nào?",
-    question_en: "",
-    choices: [
-      choice("Xuống tàu và sang Pháp", true, "Đây là hướng đi được ghi trong tư liệu."),
-      choice("Sang Nhật Bản", false, "Tư liệu nói Người không sang Nhật trong ngày ra đi."),
-    ],
-  };
-}
-
 function challengesFrom(source: string): HistoryChallenge[] {
   const fact = source.match(/Sự thật có trong tư liệu:\s*([^.]+)\./i)?.[1];
   if (fact) {
@@ -142,7 +100,6 @@ export function fillFromSource(lesson: Lesson, source: string): Lesson {
   const text = clean(source);
   if (text.length < ENOUGH) return lesson;
   const graph = lesson.graph.nodes.length > 0 ? lesson.graph : graphFrom(text, lesson.title_vi);
-  const mission = lesson.mission ?? missionFrom(text);
   const ai_vs_history = lesson.ai_vs_history.length > 0 ? lesson.ai_vs_history : challengesFrom(text);
-  return { ...lesson, graph, mission, ai_vs_history };
+  return { ...lesson, graph, ai_vs_history };
 }

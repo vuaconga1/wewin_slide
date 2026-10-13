@@ -7,6 +7,14 @@ const nextConfig: NextConfig = {
     turbopackServerFastRefresh: false,
   },
   serverExternalPackages: ["@prisma/client", "@prisma/adapter-pg", "pg", "pdf-parse", "mammoth"],
+  async headers() {
+    return [
+      {
+        source: "/assets/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

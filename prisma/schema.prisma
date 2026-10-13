@@ -100,6 +100,7 @@ model LessonSlide {
   questionVi   String   @default("")
   questionEn   String   @default("")
   choices      Json
+  elements     Json?
   sourceQuote  String   @default("")
   sourceOk     Boolean  @default(true)
   imageUrl     String?

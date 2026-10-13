@@ -104,8 +104,8 @@ function sectionLines(lesson: Lesson, section: Exclude<PdfSection, "lesson">) {
       mission.question_en,
       ...choices.flatMap((choice, index) => [
         `${index + 1}. ${[choice.vi, choice.en].filter((part) => part.trim()).join(" / ")}`,
-        choice.consequence_vi.trim() ? `Hệ quả: ${choice.consequence_vi}` : "",
-        choice.consequence_en.trim() ? `Consequence: ${choice.consequence_en}` : "",
+        choice.consequence_vi?.trim() ? `Hệ quả: ${choice.consequence_vi}` : "",
+        choice.consequence_en?.trim() ? `Consequence: ${choice.consequence_en}` : "",
       ]),
     ].filter((line) => line.trim());
   }

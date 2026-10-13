@@ -89,6 +89,8 @@ model LessonSlide {
   order        Int
   layout       String
   type         String
+  animation    String   @default("rise")
+  transition   String   @default("fade")
   titleVi      String
   titleEn      String
   bodyVi       String   @default("")

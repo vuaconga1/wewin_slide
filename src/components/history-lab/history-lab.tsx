@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { downloadLessonPdf } from "@/components/history-lab/download-pdf";
 import { GraphView, MissionView, ReportView, SourceGap, VerifyView } from "@/components/history-lab/history-views";
@@ -10,12 +10,28 @@ import { LAYOUT_CATALOG, type Lesson, type LessonSlide, type SlideLayout } from 
 type Lang = "vi" | "both" | "en";
 type View = "lesson" | "graph" | "mission" | "verify" | "report";
 
+function Glyph({ children }: { children: ReactNode }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {children}
+    </svg>
+  );
+}
+
+function savedLabel(savedAt: number | null, now: number) {
+  if (savedAt == null) return "Đã lưu";
+  const minutes = Math.floor((now - savedAt) / 60000);
+  if (minutes < 1) return "Đã lưu vừa xong";
+  if (minutes < 60) return `Đã lưu ${minutes} phút trước`;
+  return `Đã lưu ${Math.floor(minutes / 60)} giờ trước`;
+}
+
 const TABS: { id: View; label: string }[] = [
-  { id: "lesson", label: "📖 Bài học AI" },
-  { id: "graph", label: "🧠 Knowledge Graph" },
-  { id: "mission", label: "⏳ Time Travel" },
-  { id: "verify", label: "🤖 AI vs History" },
-  { id: "report", label: "📊 Learning Analytics" },
+  { id: "lesson", label: "Bài học AI" },
+  { id: "graph", label: "Knowledge Graph" },
+  { id: "mission", label: "Time Travel" },
+  { id: "verify", label: "AI vs History" },
+  { id: "report", label: "Learning Analytics" },
 ];
 
 async function exportPptx(lesson: Lesson) {
@@ -83,6 +99,18 @@ export function HistoryLab({
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [studioConfig, setStudioConfig] = useState<StudioConfig>(blankStudio);
+  const [sourceFiles, setSourceFiles] = useState<File[]>([]);
+  const [linkText, setLinkText] = useState("");
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const [pageMenu, setPageMenu] = useState<{ x: number; y: number } | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const filmRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   function startPresent() {
     if (!lesson) return;
@@ -117,10 +145,7 @@ export function HistoryLab({
     const slideCount = lesson.slides.length;
     const onLesson = view === "lesson";
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setPresenting(false);
-        if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
-      }
+      if (event.key === "Escape") stopPresent();
       if (onLesson && event.key === "ArrowRight") setIndex((value) => Math.min(slideCount - 1, value + 1));
       if (onLesson && event.key === "ArrowLeft") setIndex((value) => Math.max(0, value - 1));
       if (event.key === "F5") event.preventDefault();
@@ -149,6 +174,7 @@ export function HistoryLab({
       return null;
     }
     setLesson(data.lesson);
+    setSavedAt(Date.now());
     return data.lesson;
   }
 
@@ -162,6 +188,9 @@ export function HistoryLab({
     setError("");
     setNotice("");
     setStudioConfig(blankStudio());
+    setSourceFiles([]);
+    setLinkText("");
+    if (fileInput.current) fileInput.current.value = "";
   }
 
   function onNew() {
@@ -194,6 +223,7 @@ export function HistoryLab({
       const data = (await response.json()) as { lesson?: Lesson; error?: string };
       if (!response.ok || !data.lesson) throw new Error(data.error || "Không lưu được bài giảng.");
       setLesson(data.lesson);
+      setSavedAt(Date.now());
       setNotice("Đã lưu thiết kế.");
       if (data.lesson.id) router.replace(`/studio?id=${data.lesson.id}`);
     } catch (reason) {
@@ -238,15 +268,14 @@ export function HistoryLab({
 
   async function onGenerate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const button = event.currentTarget.querySelector("#go");
     setError("");
     setNotice("");
     setBusy(true);
-    if (button instanceof HTMLButtonElement) {
-      button.disabled = true;
-      button.textContent = "AI đang phân tích nguồn & tạo trải nghiệm…";
-    }
     const form = new FormData(event.currentTarget);
+    form.delete("files");
+    form.delete("urls");
+    for (const file of sourceFiles.slice(0, 8)) form.append("files", file);
+    for (const link of linkText.split(/\s+/).map((item) => item.trim()).filter(Boolean)) form.append("urls", link);
     setStudioConfig({
       topic: String(form.get("topic") || ""),
       grade: String(form.get("grade") || "Grade 5"),
@@ -263,6 +292,7 @@ export function HistoryLab({
       const data = (await response.json()) as { lesson?: Lesson; error?: string };
       if (!response.ok || !data.lesson) throw new Error(data.error || "Không tạo được bài giảng.");
       setLesson(data.lesson);
+      if (data.lesson.id) setSavedAt(Date.now());
       setIndex(0);
       setAnswered({});
       setEditing(false);
@@ -272,10 +302,6 @@ export function HistoryLab({
       setError(reason instanceof Error ? reason.message : "Không tạo được bài giảng.");
     } finally {
       setBusy(false);
-      if (button instanceof HTMLButtonElement) {
-        button.disabled = false;
-        button.textContent = "✨ GENERATE WITH AI";
-      }
     }
   }
 
@@ -290,6 +316,72 @@ export function HistoryLab({
     const next = { ...lesson, slides };
     setLesson(next);
     if (save) void persist(next);
+  }
+
+  useEffect(() => {
+    const root = filmRef.current;
+    const current = root?.querySelector<HTMLElement>(".film-page.on");
+    if (!root || !current) return;
+    const left = current.offsetLeft - (root.clientWidth - current.clientWidth) / 2;
+    root.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
+  }, [index, lesson?.slides.length]);
+
+  useEffect(() => {
+    if (!pageMenu) return;
+    const place = () => {
+      const more = filmRef.current?.querySelector(".film-more");
+      if (!more) return;
+      const box = more.getBoundingClientRect();
+      setPageMenu({ x: box.right, y: box.top });
+    };
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [pageMenu != null]);
+
+  function blankSlide(source: LessonSlide): LessonSlide {
+    return {
+      ...source,
+      id: undefined,
+      title_vi: "Slide mới",
+      title_en: "New slide",
+      body_vi: "",
+      body_en: "",
+      image_url: null,
+      choices: [],
+      vocab: [],
+      question_vi: "",
+      question_en: "",
+    };
+  }
+
+  function insertSlide(at: number, item: LessonSlide) {
+    if (!lesson) return;
+    const slides = [...lesson.slides.slice(0, at), item, ...lesson.slides.slice(at)];
+    const next = replaceSlides(slides);
+    setIndex(at);
+    if (next) void persist(next);
+  }
+
+  function addPage() {
+    if (!slide) return;
+    insertSlide(index + 1, blankSlide(slide));
+  }
+
+  function duplicatePage() {
+    if (!slide) return;
+    insertSlide(index + 1, { ...slide, id: undefined });
+  }
+
+  function deletePage() {
+    if (!lesson || lesson.slides.length <= 1) return;
+    const slides = lesson.slides.filter((_, slideIndex) => slideIndex !== index);
+    const next = replaceSlides(slides);
+    setIndex(Math.max(0, index - 1));
+    if (next) void persist(next);
   }
 
   function moveSlide(from: number, to: number) {
@@ -307,28 +399,59 @@ export function HistoryLab({
   return (
     <>
       <div className="filebar">
-        <button type="button" className="btn" onClick={onNew}>New</button>
-        <button type="button" className="btn" onClick={onOpen}>Open</button>
-        <button type="button" className="btn primary" onClick={() => void onSave()} disabled={!lesson || busy}>Save</button>
-        <button type="button" className="btn" onClick={() => void onPdf()} disabled={!lesson}>Download PDF</button>
-        <button type="button" className="btn" onClick={startPresent} disabled={!lesson} title="F5">Present</button>
-        <span className="file-title">{lesson ? lesson.title_vi : "Thiết kế mới"}</span>
-      </div>
-      <section className="hero">
-        <div>
-          <span className="badge">AI • HISTORY • CLIL • GAME-BASED LEARNING</span>
-          <h1>
-            Học lịch sử Việt Nam
-            <br />
-            <em>trong thời đại A.I</em>
-          </h1>
-          <p>
-            Biến tư liệu lịch sử đã kiểm chứng thành bài học song ngữ, bản đồ tri thức, trải nghiệm “du hành thời
-            gian” và thử thách kiểm chứng AI bằng bằng chứng.
-          </p>
+        <div className="file-actions">
+          <button type="button" className="btn" onClick={onNew}>
+            <Glyph><path d="M12 5v14M5 12h14" /></Glyph>
+            Mới
+          </button>
+          <button type="button" className="btn" onClick={onOpen}>
+            <Glyph><path d="M3 7h6l2 2h10v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></Glyph>
+            Mở
+          </button>
+          <button type="button" className="btn primary" onClick={() => void onSave()} disabled={!lesson || busy}>
+            <Glyph><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8" /></Glyph>
+            Lưu
+          </button>
         </div>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img className="mascot" src="/assets/wewin-mascot.png" alt="" />
+        <div className="file-center">
+          <strong>{lesson ? lesson.title_vi : "Thiết kế mới"}</strong>
+          {lesson?.id ? <span className="saved-flag">{savedLabel(savedAt, now)}</span> : null}
+        </div>
+        <div className="file-actions">
+          <details className="download-menu">
+            <summary className={lesson ? "" : "off"}>
+              <Glyph><path d="M12 3v12M7 10l5 5 5-5M5 21h14" /></Glyph>
+              Tải xuống
+              <Glyph><path d="M6 9l6 6 6-6" /></Glyph>
+            </summary>
+            <div className="download-list">
+              <button type="button" disabled={!lesson} onClick={() => void onPdf()}>PDF</button>
+              <button type="button" disabled={!lesson || !lessonHasMaterial} onClick={() => lesson && void exportPptx(lesson)}>PowerPoint</button>
+            </div>
+          </details>
+          <button type="button" className="btn primary" onClick={startPresent} disabled={!lesson} title="F5">
+            <Glyph><path d="M8 5v14l11-7z" fill="currentColor" stroke="none" /></Glyph>
+            Trình chiếu
+          </button>
+        </div>
+      </div>
+      <section className="banner">
+        <div className="hero">
+          <div>
+            <span className="badge">AI • HISTORY • CLIL • GAME-BASED LEARNING</span>
+            <h1>
+              Học lịch sử Việt Nam
+              <br />
+              <em>trong thời đại A.I</em>
+            </h1>
+            <p>
+              Biến tư liệu lịch sử đã kiểm chứng thành bài học song ngữ, bản đồ tri thức, trải nghiệm “du hành thời
+              gian” và thử thách kiểm chứng AI bằng bằng chứng.
+            </p>
+          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="mascot" src="/assets/wewin-mascot.png" alt="" />
+        </div>
       </section>
       <div className="tabs">
         {TABS.map((tab) => (
@@ -339,15 +462,46 @@ export function HistoryLab({
       </div>
       <div className="app">
         <form className="panel" onSubmit={onGenerate}>
-          <h3>✨ Tạo trải nghiệm lịch sử</h3>
+          <h3>Tạo trải nghiệm lịch sử</h3>
           <label>Chủ đề</label>
           <input className="f" name="topic" placeholder="Nhập chủ đề bài học" required />
           <label>Dán tư liệu đã kiểm chứng</label>
-          <textarea className="f" name="text" placeholder="Dán nội dung SGK / tài liệu chính thống..." />
+          <textarea className="f" name="text" placeholder="Dán nội dung SGK / tài liệu chính thống..." style={{ maxHeight: 240, overflowY: "auto" }} />
           <label>Hoặc tải PDF / Word / TXT / hình ảnh</label>
-          <input className="f" type="file" name="files" accept=".pdf,.docx,.txt,.png,.jpg,.jpeg,.webp" multiple />
+          <input
+            ref={fileInput}
+            className="f"
+            type="file"
+            accept=".pdf,.docx,.txt,.png,.jpg,.jpeg,.webp"
+            multiple
+            onChange={(event) => {
+              const picked = [...(event.target.files ?? [])];
+              setSourceFiles((current) => [...current, ...picked].slice(0, 8));
+              event.target.value = "";
+            }}
+          />
+          <p className="hint">Tối đa 8 file.</p>
+          {sourceFiles.length > 0 ? (
+            <ul className="source-list">
+              {sourceFiles.map((file, fileIndex) => (
+                <li key={`${file.name}-${file.size}-${fileIndex}`}>
+                  <span>{file.name}</span>
+                  <button type="button" onClick={() => setSourceFiles((current) => current.filter((_, index) => index !== fileIndex))}>
+                    Bỏ
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
           <label>Hoặc link website</label>
-          <input className="f" name="url" placeholder="https://..." />
+          <textarea
+            className="f"
+            style={{ maxHeight: 240, overflowY: "auto" }}
+            value={linkText}
+            placeholder={"https://...\nhttps://..."}
+            onChange={(event) => setLinkText(event.target.value)}
+          />
+         
           <div className="row">
             <div>
               <label>Khối lớp</label>
@@ -400,13 +554,17 @@ export function HistoryLab({
           <label>Ghi chú</label>
           <input className="f" name="notes" placeholder="Ví dụ: nhấn mạnh nguyên nhân – hệ quả" />
           <button className="btn go" id="go" disabled={busy}>
-            ✨ GENERATE WITH AI
+           TẠO SLIDE 
           </button>
           {error ? <div className="err">{error}</div> : null}
           {notice ? <div className="note">{notice}</div> : null}
         </form>
-        <main className="panel" id="view">
-          {!lesson || !slide ? (
+        <main className="panel slide-panel" id="view">
+          {busy ? (
+            <div className="slide-loading" role="status" aria-label="Đang tạo slide">
+              <span className="spinner" aria-hidden="true" />
+            </div>
+          ) : !lesson || !slide ? (
             <div className="empty">
               <div>
                 <h3>WEWIN AI History Lab</h3>
@@ -433,38 +591,77 @@ export function HistoryLab({
                     </button>
                   ))}
                 </div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button type="button" className="btn" onClick={() => setEditing((value) => !value)}>
-                    {editing ? "Xong" : "Sửa"}
+                <div className="bar-tools">
+                  <button type="button" className={editing ? "btn on" : "btn"} onClick={() => setEditing((value) => !value)}>
+                    <Glyph><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></Glyph>
+                    {editing ? "Xong" : "Sửa trang"}
                   </button>
-                  <button type="button" className="btn" onClick={() => void exportPptx(lesson)}>
-                    ⬇ PowerPoint
-                  </button>
+                  <div className="page-step">
+                    <button type="button" aria-label="Trang trước" disabled={index === 0} onClick={() => setIndex((value) => Math.max(0, value - 1))}>‹</button>
+                    <span>{index + 1} / {lesson.slides.length}</span>
+                    <button type="button" aria-label="Trang sau" disabled={index === lesson.slides.length - 1} onClick={() => setIndex((value) => Math.min(lesson.slides.length - 1, value + 1))}>›</button>
+                  </div>
                 </div>
               </div>
               <SlideCard
                 slide={slide}
                 index={index}
-                total={lesson.slides.length}
                 lang={lang}
                 answered={answered[index]}
                 onAnswer={(choice) => setAnswered((current) => ({ ...current, [index]: choice }))}
                 editableImage={editing}
                 onImageMove={(x, y) => patchSlide({ image_x: x, image_y: y })}
               />
-              <div className="nav">
-                <button type="button" className="btn" disabled={index === 0} onClick={() => setIndex((value) => Math.max(0, value - 1))}>
-                  ← Trước
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={index === lesson.slides.length - 1}
-                  onClick={() => setIndex((value) => Math.min(lesson.slides.length - 1, value + 1))}
-                >
-                  Sau →
-                </button>
+              <div className="film">
+                <div className="film-pages" ref={filmRef}>
+                  {lesson.slides.map((item, slideIndex) => (
+                    <div key={item.id ?? slideIndex} className={slideIndex === index ? "film-page on" : "film-page"}>
+                      <div className="film-shot" aria-hidden inert>
+                        <div className="film-shot-scale">
+                          <SlideCard slide={item} index={slideIndex} lang={lang} />
+                        </div>
+                      </div>
+                      <button type="button" className="film-hit" title={`Trang ${slideIndex + 1}`} aria-label={`Trang ${slideIndex + 1}`} onClick={() => setIndex(slideIndex)} />
+                      <span className="film-num">{slideIndex + 1}</span>
+                      {slideIndex === index ? (
+                        <button
+                          type="button"
+                          className="film-more"
+                          aria-label="Tùy chọn trang"
+                          aria-expanded={pageMenu != null}
+                          onClick={(event) => {
+                            const box = event.currentTarget.getBoundingClientRect();
+                            setPageMenu((current) => (current ? null : { x: box.right, y: box.top }));
+                          }}
+                        >
+                          ···
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+                <div className="film-add">
+                  <button type="button" aria-label="Thêm trang" onClick={addPage}>+</button>
+                  <details>
+                    <summary aria-label="Thêm trang">⌄</summary>
+                    <div className="film-list">
+                      <button type="button" onClick={addPage}>Thêm trang trống</button>
+                    </div>
+                  </details>
+                </div>
               </div>
+              {pageMenu ? (
+                <>
+                  <button type="button" className="film-backdrop" aria-label="Đóng menu" onClick={() => setPageMenu(null)} />
+                  <div
+                    className="film-list film-pop"
+                    style={{ top: pageMenu.y - 6, left: pageMenu.x }}
+                  >
+                    <button type="button" onClick={() => { setPageMenu(null); duplicatePage(); }}>Nhân bản</button>
+                    <button type="button" disabled={lesson.slides.length <= 1} onClick={() => { setPageMenu(null); deletePage(); }}>Xóa trang</button>
+                  </div>
+                </>
+              ) : null}
               {editing ? (
                 <div className="editor">
                   <div className="chips">
@@ -625,32 +822,8 @@ export function HistoryLab({
             ) : view === "report" ? (
               <ReportView />
             ) : slide ? (
-              <SlideCard slide={slide} index={index} total={lesson.slides.length} lang={lang} answered={answered[index]} />
+              <SlideCard slide={slide} index={index} lang={lang} answered={answered[index]} />
             ) : null}
-          </div>
-          <div className="nav">
-            {view === "lesson" ? (
-              <button type="button" className="btn" onClick={() => setIndex((value) => Math.max(0, value - 1))} disabled={index === 0}>
-                ← Trước
-              </button>
-            ) : (
-              <span />
-            )}
-            <button type="button" className="btn" onClick={stopPresent}>
-              Thoát
-            </button>
-            {view === "lesson" ? (
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setIndex((value) => Math.min(lesson.slides.length - 1, value + 1))}
-                disabled={!slide || index === lesson.slides.length - 1}
-              >
-                Sau →
-              </button>
-            ) : (
-              <span />
-            )}
           </div>
         </div>
       ) : null}

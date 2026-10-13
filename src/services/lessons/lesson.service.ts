@@ -26,6 +26,8 @@ function slideData(slide: LessonSlide, order: number) {
     order,
     layout: slide.layout,
     type: slide.type,
+    animation: slide.animation,
+    transition: slide.transition,
     titleVi: slide.title_vi,
     titleEn: slide.title_en,
     bodyVi: slide.body_vi,
@@ -56,6 +58,8 @@ function fromRecord(record: {
     id: string;
     layout: string;
     type: string;
+    animation: string;
+    transition: string;
     titleVi: string;
     titleEn: string;
     bodyVi: string;
@@ -81,6 +85,8 @@ function fromRecord(record: {
         id: slide.id,
         layout: slide.layout,
         type: slide.type,
+        animation: slide.animation,
+        transition: slide.transition,
         title_vi: slide.titleVi,
         title_en: slide.titleEn,
         body_vi: slide.bodyVi,
@@ -103,6 +109,8 @@ const include = {
       id: true,
       layout: true,
       type: true,
+      animation: true,
+      transition: true,
       titleVi: true,
       titleEn: true,
       bodyVi: true,

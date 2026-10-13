@@ -4,7 +4,8 @@ import net from "node:net";
 import path from "node:path";
 import mammoth from "mammoth";
 
-const MAX_CHARS = 40_000;
+const MAX_CHARS = 100_000;
+const MAX_LINKS = 6;
 
 export type ExtractedSource = {
   text: string;
@@ -72,9 +73,28 @@ async function saveImage(file: File) {
   return `/uploads/${filename}`;
 }
 
+async function readPage(raw: string) {
+  const url = await safeUrl(raw);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(url, {
+      headers: { "User-Agent": "WeWIN-History-Lab" },
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`Không tải được link (${response.status})`);
+    const length = Number(response.headers.get("content-length") || 0);
+    if (length > 3_000_000) throw new Error("Trang web quá lớn.");
+    return htmlToText((await response.text()).slice(0, 3_000_000));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function extractSource(input: {
   text?: string;
   url?: string;
+  urls?: string[];
   files?: File[];
 }): Promise<ExtractedSource> {
   const parts: string[] = [];
@@ -83,21 +103,15 @@ export async function extractSource(input: {
 
   if (input.text?.trim()) parts.push(input.text.trim());
 
-  if (input.url?.trim()) {
-    const url = await safeUrl(input.url.trim());
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
+  const links = [...new Set([...(input.urls ?? []), input.url ?? ""].map((item) => item.trim()).filter(Boolean))].slice(0, MAX_LINKS);
+  if ((input.urls?.length ?? 0) + (input.url?.trim() ? 1 : 0) > MAX_LINKS) {
+    warnings.push(`Chỉ lấy ${MAX_LINKS} link đầu tiên.`);
+  }
+  for (const link of links) {
     try {
-      const response = await fetch(url, {
-        headers: { "User-Agent": "WeWIN-History-Lab" },
-        signal: controller.signal,
-      });
-      if (!response.ok) throw new Error(`Không tải được link (${response.status})`);
-      const length = Number(response.headers.get("content-length") || 0);
-      if (length > 3_000_000) throw new Error("Trang web quá lớn.");
-      parts.push(htmlToText((await response.text()).slice(0, 3_000_000)));
-    } finally {
-      clearTimeout(timer);
+      parts.push(await readPage(link));
+    } catch (error) {
+      warnings.push(error instanceof Error ? `${link}: ${error.message}` : `Không tải được ${link}`);
     }
   }
 
@@ -122,7 +136,11 @@ export async function extractSource(input: {
     }
   }
 
-  const text = parts.join("\n\n---\n\n").slice(0, MAX_CHARS);
+  const joined = parts.join("\n\n---\n\n").trim();
+  const text = joined.slice(0, MAX_CHARS);
+  if (joined.length > MAX_CHARS) {
+    warnings.push("Tư liệu dài hơn một lượt tạo. Phần vượt giới hạn ở cuối không được đưa vào bài.");
+  }
   if (text.length < 80 && images.length === 0) {
     throw new Error("Chưa có đủ tư liệu. Hãy dán text, tải file hoặc nhập link.");
   }

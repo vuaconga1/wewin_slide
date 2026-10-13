@@ -1,6 +1,7 @@
 import { extractSource } from "@/services/sources/extract-source";
 import { fillFromSource } from "./fill-from-source";
 import { isLayout, layoutInstruction } from "./layout-catalog";
+import { DEFAULT_ANIMATION, DEFAULT_TRANSITION, motionInstruction } from "./motion-catalog";
 import {
   normalizeLesson,
   SLIDE_LAYOUTS,
@@ -13,6 +14,7 @@ export type GenerateRequest = {
   topic: string;
   text: string;
   url: string;
+  urls: string[];
   grade: string;
   cefr: string;
   mode: string;
@@ -26,10 +28,11 @@ export type GenerateRequest = {
 const SYSTEM = `Bạn là chuyên gia Lịch sử Việt Nam, CLIL và thiết kế bài giảng song ngữ Anh–Việt. Chỉ dùng thông tin trong TƯ LIỆU. Không tự thêm dữ kiện lịch sử. Không mô tả hay gắn hình ảnh bằng AI Vision. Không OCR. Không tạo ghi chú giảng dạy. Không tạo câu trích khóa nguồn. Không trả teacher_notes, source_quote hay source_ok. Trả JSON hợp lệ, không markdown, không HTML, không CSS.
 Tạo đúng số slide giáo viên yêu cầu, từ 3 đến 30.
 ${layoutInstruction()}
+${motionInstruction()}
 Mỗi slide có tiêu đề song ngữ và thân bài song ngữ đúng dạng layout đã chọn. vocab chỉ khi layout là vocab. question và choices chỉ khi layout là quiz.
 Tiếng Anh viết lại đúng CEFR, không dịch từng chữ. Tên riêng giữ tiếng Việt. Trường type để cùng giá trị với layout.
 Khi tư liệu có nhân vật, mốc thời gian, địa điểm hoặc một quyết định, phải điền graph, mission và ai_vs_history từ TƯ LIỆU trong cùng JSON này. mission là một cảnh quyết định: scene_vi, scene_en, question_vi, question_en, và ít nhất hai choices có vi, en, historical, consequence_vi, consequence_en. ai_vs_history có câu statement_vi, statement_en, answer (fact, interpretation hoặc unsupported), explanation_vi, explanation_en. graph có nút person, event, time, place, cause, decision, consequence và cạnh nối các nút đó. Chỉ để graph.nodes rỗng, mission null và ai_vs_history rỗng khi tư liệu quá ngắn, không đủ một sự kiện. Không bịa dữ kiện ngoài tư liệu. Thân slide để rỗng nếu không có câu trong tư liệu để điền.
-JSON: {"title_vi":"","title_en":"","warnings":[],"graph":{"nodes":[{"id":"","label":"","type":"person|event|time|place|cause|decision|consequence"}],"edges":[{"from":"","to":"","label":""}]},"slides":[{"layout":"context","type":"context","title_vi":"","title_en":"","body_vi":"","body_en":"","vocab":[{"en":"","vi":"","example":""}],"question_vi":"","question_en":"","choices":[{"vi":"","en":"","correct":false,"feedback_vi":"","feedback_en":""}]}],"mission":{"scene_vi":"","scene_en":"","question_vi":"","question_en":"","choices":[{"vi":"","en":"","historical":false,"consequence_vi":"","consequence_en":""}]},"ai_vs_history":[{"statement_vi":"","statement_en":"","answer":"fact|interpretation|unsupported","explanation_vi":"","explanation_en":""}]}`;
+JSON: {"title_vi":"","title_en":"","warnings":[],"graph":{"nodes":[{"id":"","label":"","type":"person|event|time|place|cause|decision|consequence"}],"edges":[{"from":"","to":"","label":""}]},"slides":[{"layout":"context","type":"context","animation":"rise","transition":"fade","title_vi":"","title_en":"","body_vi":"","body_en":"","vocab":[{"en":"","vi":"","example":""}],"question_vi":"","question_en":"","choices":[{"vi":"","en":"","correct":false,"feedback_vi":"","feedback_en":""}]}],"mission":{"scene_vi":"","scene_en":"","question_vi":"","question_en":"","choices":[{"vi":"","en":"","historical":false,"consequence_vi":"","consequence_en":""}]},"ai_vs_history":[{"statement_vi":"","statement_en":"","answer":"fact|interpretation|unsupported","explanation_vi":"","explanation_en":""}]}`;
 
 function splitChunks(source: string, count: number) {
   const clean = source.replace(/\s+/g, " ").trim();
@@ -81,6 +84,8 @@ function draftLesson(request: GenerateRequest, source: string, warnings: string[
     return {
       layout,
       type: layout,
+      animation: DEFAULT_ANIMATION,
+      transition: DEFAULT_TRANSITION,
       title_vi: index === 0 ? request.topic : `${request.topic} · ${index + 1}`,
       title_en: index === 0 ? request.topic : `${request.topic} · part ${index + 1}`,
       body_vi: chunk,
@@ -196,31 +201,77 @@ ${source || "(Không có tư liệu. Không bịa nội dung. body_vi và body_e
 """`;
 }
 
-async function generateWithOpenAI(request: GenerateRequest, source: string) {
+const LONG_PASTE = 12_000;
+const PASTE_LIMIT_MESSAGE =
+  "Ô Dán tư liệu đã kiểm chứng có quá nhiều chữ nên không tạo được bài. Hãy rút bớt nội dung trong ô này rồi tạo lại.";
+
+function messageText(content: string | Array<{ text?: string }> | null | undefined) {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) return content.map((part) => part.text ?? "").join("");
+  return "";
+}
+
+function pastedTooMuch(text: string) {
+  return text.trim().length > LONG_PASTE;
+}
+
+function sourceLimitError(error: unknown, pasted: string) {
+  const message = error instanceof Error ? error.message : "";
+  const tooLong = /context length|maximum context|context_length|too many tokens|input tokens/i.test(message);
+  if (pastedTooMuch(pasted) && tooLong) return new Error(PASTE_LIMIT_MESSAGE);
+  return error instanceof Error ? error : new Error("Lỗi gọi AI");
+}
+
+async function completeOpenAI(request: GenerateRequest, source: string, tokens: number) {
+  const model = process.env.MODEL || "gpt-5-nano";
+  const body: Record<string, unknown> = {
+    model,
+    max_completion_tokens: tokens,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: SYSTEM },
+      { role: "user", content: lessonPrompt(request, source) },
+    ],
+  };
+  if (/^gpt-5|^o\d/i.test(model)) body.reasoning_effort = "low";
+
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
     },
-    body: JSON.stringify({
-      model: process.env.MODEL || "gpt-5-nano",
-      max_completion_tokens: request.count > 15 ? 24000 : 16000,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: SYSTEM },
-        { role: "user", content: lessonPrompt(request, source) },
-      ],
-    }),
+    body: JSON.stringify(body),
   });
   const data = (await response.json()) as {
     error?: { message?: string };
-    choices?: { message?: { content?: string | null } }[];
+    choices?: { message?: { content?: string | Array<{ text?: string }> | null }; finish_reason?: string }[];
   };
-  if (!response.ok) throw new Error(data.error?.message || "Lỗi gọi AI");
-  const raw = data.choices?.[0]?.message?.content ?? "";
-  if (!raw.trim()) throw new Error("AI không trả nội dung.");
-  return normalizeLesson(parseModelJson(raw));
+  if (!response.ok) throw sourceLimitError(new Error(data.error?.message || "Lỗi gọi AI"), request.text);
+  const choice = data.choices?.[0];
+  return { text: messageText(choice?.message?.content), finishReason: choice?.finish_reason ?? "" };
+}
+
+async function generateWithOpenAI(request: GenerateRequest, source: string) {
+  const budget = source.length > LONG_PASTE || request.count > 15 ? 32_000 : 16_000;
+  let raw = "";
+  let finishReason = "";
+  try {
+    const result = await completeOpenAI(request, source, budget);
+    raw = result.text;
+    finishReason = result.finishReason;
+  } catch (error) {
+    throw sourceLimitError(error, request.text);
+  }
+  if (!raw.trim()) {
+    throw new Error(pastedTooMuch(request.text) ? PASTE_LIMIT_MESSAGE : "AI không trả nội dung.");
+  }
+  try {
+    return normalizeLesson(parseModelJson(raw));
+  } catch (error) {
+    if (pastedTooMuch(request.text) && finishReason === "length") throw new Error(PASTE_LIMIT_MESSAGE);
+    throw error;
+  }
 }
 
 async function generateWithModel(request: GenerateRequest, source: string) {
@@ -278,6 +329,7 @@ export async function generateLesson(request: GenerateRequest) {
   const extracted = await extractSource({
     text: request.text,
     url: request.url,
+    urls: request.urls,
     files: request.files,
   });
   const warnings = [...extracted.warnings];

@@ -1,6 +1,16 @@
 import { coerceLayout, foldLayoutText, type SlideLayout } from "./layout-catalog";
+import { coerceAnimation, coerceTransition, type MotionAnimation, type MotionTransition } from "./motion-catalog";
 
 export { LAYOUT_CATALOG, SLIDE_LAYOUTS, coerceLayout, type SlideLayout } from "./layout-catalog";
+export {
+  DEFAULT_ANIMATION,
+  DEFAULT_TRANSITION,
+  MOTION_CATALOG,
+  coerceAnimation,
+  coerceTransition,
+  type MotionAnimation,
+  type MotionTransition,
+} from "./motion-catalog";
 
 export type VocabItem = { en: string; vi: string; example?: string };
 
@@ -19,6 +29,8 @@ export type LessonSlide = {
   id?: string;
   layout: SlideLayout;
   type: string;
+  animation: MotionAnimation;
+  transition: MotionTransition;
   title_vi: string;
   title_en: string;
   body_vi: string;
@@ -138,6 +150,8 @@ export function normalizeSlide(value: unknown, index: number): LessonSlide {
     id: text(slide.id) || undefined,
     layout,
     type: layout,
+    animation: coerceAnimation(text(slide.animation)),
+    transition: coerceTransition(text(slide.transition)),
     title_vi: text(slide.title_vi, `Slide ${index + 1}`),
     title_en: text(slide.title_en),
     body_vi: bodies.body_vi,

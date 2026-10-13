@@ -181,13 +181,7 @@ export function GraphView({ lesson }: { lesson: Lesson }) {
 
   return (
     <>
-      <div className="bar">
-        <div>
-          <h3>Historical Knowledge Graph</h3>
-          <small>AI cấu trúc hóa Person • Event • Time • Place • Cause • Consequence</small>
-        </div>
-        <span className="badge">SOURCE-GROUNDED</span>
-      </div>
+    
       <div className="graph" ref={graphRef}>
         <svg
           ref={svgRef}
@@ -244,7 +238,7 @@ export function GraphView({ lesson }: { lesson: Lesson }) {
             </div>
           );
         })}
-        <div className="legend">AI không chỉ tạo slide — AI biến nguồn phi cấu trúc thành bản đồ tri thức lịch sử.</div>
+    
       </div>
     </>
   );
@@ -265,7 +259,7 @@ export function MissionView({ lesson, lang }: { lesson: Lesson; lang: Lang }) {
 
   return (
     <div className="mission">
-      <div className="tag">⏳ AI TIME TRAVEL MISSION</div>
+  
       <h2>ENTER HISTORY</h2>
       {show(lang, mission.scene_vi, mission.scene_en)}
       <div style={{ fontSize: 22, fontWeight: 800, margin: "22px 0 8px" }}>
@@ -297,11 +291,9 @@ export function VerifyView({ lesson, lang }: { lesson: Lesson; lang: Lang }) {
 
   return (
     <div className="verify">
-      <div className="tag" style={{ color: "#9a6700" }}>
-        🤖 AI vs HISTORY
-      </div>
+     
       <h2>Can you catch the AI?</h2>
-      <p>Không tin AI ngay. Hãy phân loại claim và yêu cầu bằng chứng.</p>
+
       <div className="statement">
         {challenge.statement_vi.trim() ? <div>“{challenge.statement_vi}”</div> : null}
         {challenge.statement_en.trim() ? <small>{challenge.statement_en}</small> : null}

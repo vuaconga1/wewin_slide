@@ -167,28 +167,6 @@ const TIME_TRAVEL_LIMIT = 3;
 const TIME_TRAVEL_DROP_WARNING =
   "Một số câu Time Travel không đúng cấu trúc hoặc không đủ dữ kiện được tư liệu hỗ trợ nên đã được bỏ. Hệ thống không tự thêm dữ kiện lịch sử.";
 
-const FORBIDDEN_MISSION_KEYS = new Set([
-  "consequence_vi",
-  "consequence_en",
-  "consequenceVi",
-  "consequenceEn",
-  "hypothetical",
-  "hypothetical_vi",
-  "hypothetical_en",
-  "hypotheticalVi",
-  "hypotheticalEn",
-  "alternative",
-  "alternative_history",
-  "alternativeHistory",
-  "what_if",
-  "whatIf",
-  "counterfactual",
-  "counterfactual_vi",
-  "counterfactual_en",
-  "counterfactualVi",
-  "counterfactualEn",
-]);
-
 const timeTravelOptionSchema = z.object({
   id: z.string().min(1),
   textVi: z.string().min(1),
@@ -222,19 +200,7 @@ const timeTravelQuestionSchema = z
     }
     const responseVi = question.incorrectChoiceResponseVi.trim();
     const responseEn = question.incorrectChoiceResponseEn.trim();
-    if (Boolean(responseVi) !== Boolean(responseEn)) {
-      ctx.addIssue({ code: "custom", message: "incorrectChoiceResponse" });
-    }
-    if (
-      hasCounterfactual(responseVi) ||
-      hasCounterfactual(responseEn) ||
-      hasVerdictLabel(responseVi) ||
-      hasVerdictLabel(responseEn) ||
-      hasVerdictLabel(question.historicalOutcomeVi) ||
-      hasVerdictLabel(question.historicalOutcomeEn)
-    ) {
-      ctx.addIssue({ code: "custom", message: "response" });
-    }
+    if (Boolean(responseVi) !== Boolean(responseEn)) ctx.addIssue({ code: "custom", message: "incorrectChoiceResponse" });
   });
 
 function hasCounterfactual(value: string) {
@@ -261,6 +227,10 @@ function hasVerdictLabel(value: string) {
   return /^\s*(sai|đúng|chưa chính xác|đáp án sai|incorrect|wrong|not correct)\b/i.test(value);
 }
 
+function stripVerdictLabel(value: string) {
+  return value.replace(/^\s*(?:sai|đúng|chưa chính xác|đáp án sai|incorrect|wrong|not correct)\s*[:.!-]?\s*/i, "").trim();
+}
+
 function readAlias(row: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
     if (key in row) return text(row[key]);
@@ -268,43 +238,67 @@ function readAlias(row: Record<string, unknown>, keys: string[]) {
   return "";
 }
 
-function forbiddenMissionContent(value: unknown): boolean {
-  if (!value || typeof value !== "object") return false;
-  if (Array.isArray(value)) return value.some(forbiddenMissionContent);
-  return Object.entries(value).some(([key, child]) => {
-    if (FORBIDDEN_MISSION_KEYS.has(key) && hasWords(text(child))) return true;
-    return forbiddenMissionContent(child);
-  });
+function pairedText(row: Record<string, unknown>, viKeys: string[], enKeys: string[]) {
+  const vi = readAlias(row, viKeys);
+  const en = readAlias(row, enKeys);
+  return { vi: vi || en, en: en || vi };
 }
 
 function projectTimeTravelQuestion(value: unknown, index: number) {
-  if (forbiddenMissionContent(value)) return null;
   const row = asRecord(value);
-  if (!Array.isArray(row.options) || row.options.length !== 2) return null;
-  const options = row.options.map((option) => {
+  if (!Array.isArray(row.options) || row.options.length < 2) return null;
+  const requestedCorrectOptionId = readAlias(row, ["correctOptionId", "correct_option_id", "answerId", "answer_id"]);
+  const markedIndex = row.options.findIndex((option) => {
     const item = asRecord(option);
+    return readAlias(item, ["id"]) === requestedCorrectOptionId || item.historical === true || item.correct === true;
+  });
+  const rawOptions = markedIndex >= 2 ? [row.options[0], row.options[markedIndex]] : row.options.slice(0, 2);
+  const options = rawOptions.map((option, optionIndex) => {
+    const item = asRecord(option);
+    const label = pairedText(item, ["textVi", "text_vi", "vi", "labelVi", "label_vi"], ["textEn", "text_en", "en", "labelEn", "label_en"]);
     return {
-      id: readAlias(item, ["id"]),
-      textVi: readAlias(item, ["textVi", "text_vi"]),
-      textEn: readAlias(item, ["textEn", "text_en"]),
+      id: readAlias(item, ["id"]) || String.fromCharCode(97 + optionIndex),
+      textVi: label.vi,
+      textEn: label.en,
     };
   });
+  const context = pairedText(row, ["contextVi", "context_vi", "sceneVi", "scene_vi"], ["contextEn", "context_en", "sceneEn", "scene_en"]);
+  const question = pairedText(row, ["questionVi", "question_vi"], ["questionEn", "question_en"]);
+  const outcome = pairedText(
+    row,
+    ["historicalOutcomeVi", "historical_outcome_vi", "outcomeVi", "outcome_vi"],
+    ["historicalOutcomeEn", "historical_outcome_en", "outcomeEn", "outcome_en"],
+  );
+  const evidence = readAlias(row, ["sourceEvidence", "source_evidence", "evidence"]);
+  const response = pairedText(
+    row,
+    ["incorrectChoiceResponseVi", "incorrect_choice_response_vi", "feedbackVi", "feedback_vi"],
+    ["incorrectChoiceResponseEn", "incorrect_choice_response_en", "feedbackEn", "feedback_en"],
+  );
+  const unsafeResponse = hasCounterfactual(response.vi) || hasCounterfactual(response.en) || hasVerdictLabel(response.vi) || hasVerdictLabel(response.en);
+  let correctOptionId = requestedCorrectOptionId;
+  if (!options.some((option) => option.id === correctOptionId)) {
+    const marked = rawOptions
+      .map((option, optionIndex) => ({ option: asRecord(option), id: options[optionIndex]?.id ?? "" }))
+      .filter(({ option }) => option.historical === true || option.correct === true);
+    if (marked.length === 1) correctOptionId = marked[0]?.id ?? "";
+  }
   const orderValue = row.order;
   const order = typeof orderValue === "number" && Number.isInteger(orderValue) && orderValue > 0 ? orderValue : index + 1;
   return {
     id: readAlias(row, ["id"]) || `tt-${order}`,
     order,
-    contextVi: readAlias(row, ["contextVi", "context_vi"]),
-    contextEn: readAlias(row, ["contextEn", "context_en"]),
-    questionVi: readAlias(row, ["questionVi", "question_vi"]),
-    questionEn: readAlias(row, ["questionEn", "question_en"]),
+    contextVi: context.vi || evidence || outcome.vi,
+    contextEn: context.en || evidence || outcome.en,
+    questionVi: question.vi,
+    questionEn: question.en,
     options,
-    correctOptionId: readAlias(row, ["correctOptionId", "correct_option_id"]),
-    historicalOutcomeVi: readAlias(row, ["historicalOutcomeVi", "historical_outcome_vi"]),
-    historicalOutcomeEn: readAlias(row, ["historicalOutcomeEn", "historical_outcome_en"]),
-    incorrectChoiceResponseVi: readAlias(row, ["incorrectChoiceResponseVi", "incorrect_choice_response_vi"]),
-    incorrectChoiceResponseEn: readAlias(row, ["incorrectChoiceResponseEn", "incorrect_choice_response_en"]),
-    sourceEvidence: readAlias(row, ["sourceEvidence", "source_evidence"]),
+    correctOptionId,
+    historicalOutcomeVi: stripVerdictLabel(outcome.vi),
+    historicalOutcomeEn: stripVerdictLabel(outcome.en),
+    incorrectChoiceResponseVi: unsafeResponse ? "" : response.vi,
+    incorrectChoiceResponseEn: unsafeResponse ? "" : response.en,
+    sourceEvidence: evidence || outcome.vi || outcome.en,
   };
 }
 

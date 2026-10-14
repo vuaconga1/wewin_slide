@@ -15,7 +15,7 @@ import {
   readSummary,
   readTimeline,
 } from "@/services/lessons/layout-catalog";
-import { applyElementText, splitIdeas, type TextOp } from "@/services/lessons/slide-elements";
+import { applyElementText, SLIDE_TITLE_CHROME, splitIdeas, type TextOp } from "@/services/lessons/slide-elements";
 import type { LessonSlide } from "@/services/lessons/lesson-types";
 
 type Lang = "vi" | "both" | "en";
@@ -657,12 +657,20 @@ export function SlideCard({
       }}
     >
       <MotionStage className="slide-fill">
+      <div className="slide-head">
       <div className="slide-mast">
         <Image src="/assets/wewin-logo.png" alt="WEWIN AI HISTORY LAB" width={110} height={28} sizes="110px" />
         <span>VIỆT NAM — HÀNH TRÌNH DÂN TỘC</span>
       </div>
-      <div className="slide-copy">
-      <StageBlock id="tag" className="fit" still>
+      <div
+        className="slide-titles"
+        style={{
+          "--slide-kicker-size": `${SLIDE_TITLE_CHROME.kickerPx}px`,
+          "--slide-title-size": `${SLIDE_TITLE_CHROME.titleViPx}px`,
+          "--slide-subtitle-size": `${SLIDE_TITLE_CHROME.titleEnPx}px`,
+        } as CSSProperties}
+      >
+      <StageBlock id="tag" className="block-wide" still>
         <div className="tag">{layoutById(slide.layout).label.toUpperCase()}</div>
       </StageBlock>
       <StageBlock id="title" className="block-wide">
@@ -673,6 +681,9 @@ export function SlideCard({
           <LiveText as="p" className="slide-subtitle" slot={{ id: "subtitle", op: { type: "title", field: "en" } }} value={slide.title_en} />
         </StageBlock>
       ) : null}
+      </div>
+      </div>
+      <div className="slide-copy">
       {slide.layout === "quiz" ? <IdeaList lang={lang} vi={slide.body_vi} en={slide.body_en} region="body" /> : (
         <LayoutBody slide={slide} lang={lang} editableImage={editableImage} onImageMove={onImageMove} />
       )}

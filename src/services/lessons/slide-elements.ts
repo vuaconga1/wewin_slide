@@ -97,6 +97,19 @@ export function textKey(slot: TextSlot) {
   }
 }
 
+/**
+ * Fixed header for every layout: layout kicker, Vietnamese title, English title.
+ * New slides leave `tag` / `title` / `subtitle` without x/y so preview, filmstrip,
+ * and present mode all render them in `.slide-titles`, directly under the WEWIN logo.
+ * Pixel sizes are written onto that band as CSS variables. A saved x/y after a drag still wins.
+ */
+export const SLIDE_TITLE_CHROME = {
+  anchor: "under-logo" as const,
+  kickerPx: 56,
+  titleViPx: 68,
+  titleEnPx: 40,
+};
+
 export function hasPlacement(elements: SlideElements | undefined) {
   return Object.values(elements ?? {}).some((box) => typeof box?.x === "number" && typeof box?.y === "number");
 }

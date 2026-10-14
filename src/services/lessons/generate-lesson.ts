@@ -104,6 +104,7 @@ function draftLesson(request: GenerateRequest, source: string, warnings: string[
       image_url: null,
       image_x: 72,
       image_y: 62,
+      // Title lines stay unplaced so they use the shared under-logo header (SLIDE_TITLE_CHROME).
       elements: {},
     };
   });

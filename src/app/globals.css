@@ -223,6 +223,10 @@ textarea.f { min-height: 100px; resize: vertical; }
   min-height: 450px;
   padding: 38px;
   position: relative;
+  /* Keep in sync with SLIDE_TITLE_CHROME in slide-elements.ts */
+  --slide-kicker-size: 56px;
+  --slide-title-size: 68px;
+  --slide-subtitle-size: 40px;
 }
 .slide-copy {
   width: 100%;
@@ -245,16 +249,23 @@ textarea.f { min-height: 100px; resize: vertical; }
   justify-content: flex-start;
   min-height: 0;
 }
-/* No-image content starts one fifth down the slide. Dragged slides stay where the teacher put them. */
+/* Titles sit under the logo. Body starts at one fifth, or just after the title band when that band is taller. Dragged slides stay where the teacher put them. */
+.slide.no-image:not(.is-free) .slide-head {
+  min-height: 20%;
+}
+.slide:not(.is-free) .slide-head {
+  position: relative;
+  z-index: 3;
+}
 .slide.no-image:not(.is-free) .slide-copy {
-  position: absolute;
-  top: 20%;
-  left: 38px;
-  right: 38px;
+  position: relative;
+  top: auto;
+  left: auto;
+  right: auto;
   width: auto;
-  height: auto;
-  max-height: 80%;
-  flex: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
   justify-content: flex-start;
   align-items: stretch;
   overflow: auto;
@@ -271,12 +282,41 @@ textarea.f { min-height: 100px; resize: vertical; }
   display: block;
   overflow: visible;
 }
+.slide-head {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+}
+.slide-titles {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin-top: 6px;
+  margin-bottom: 4px;
+}
+.slide-titles .stage-block {
+  max-width: 100%;
+  min-width: 0;
+}
+.slide-titles .tag,
+.slide-titles h2,
+.slide-titles .slide-subtitle {
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
 .slide-subtitle {
-  margin: -8px 0 18px;
-  font-size: 24px;
+  margin: 0;
+  font-size: var(--slide-subtitle-size, 40px);
   font-weight: 700;
   color: #ffd98b;
-  line-height: 1.3;
+  line-height: 1.2;
 }
 .stage-block.is-placed {
   position: absolute;
@@ -330,15 +370,21 @@ textarea.f { min-height: 100px; resize: vertical; }
 .slide-mast {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
+  gap: 16px;
+  margin-bottom: 0;
   color: #f4e4bf;
   font-size: 11px;
   letter-spacing: 0.06em;
 }
 
-.slide-mast img { height: 28px; width: auto; }
-.slide-mast span { margin-left: auto; color: #e7c98a; letter-spacing: 0.14em; }
+.slide-mast img { height: 28px; width: auto; flex: 0 0 auto; }
+.slide-mast span {
+  margin-left: auto;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  color: #e7c98a;
+  letter-spacing: 0.14em;
+}
 
 @keyframes motion-fade {
   from { opacity: 0; }
@@ -372,9 +418,9 @@ textarea.f { min-height: 100px; resize: vertical; }
   .slide.anim-rise .el { animation: none; }
 }
 
-.slide h2 { font-size: 36px; margin: 4px 0 18px; font-weight: 800; line-height: 1.2; }
-.slide h2 small { display: block; margin-top: 6px; font-size: 24px; font-weight: 700; color: #ffd98b; }
-.layout-title h2 { font-size: 48px; }
+.slide h2 { font-size: var(--slide-title-size, 68px); margin: 0; font-weight: 800; line-height: 1.12; }
+.slide h2 small { display: block; margin-top: 6px; font-size: var(--slide-subtitle-size, 40px); font-weight: 700; color: #ffd98b; }
+.layout-title h2 { font-size: var(--slide-title-size, 68px); }
 .title-lead, .summary-lead { line-height: 1.35; }
 .summary-lead { font-weight: 800; }
 .slots { display: grid; gap: 10px; margin-top: 16px; }
@@ -418,10 +464,10 @@ textarea.f { min-height: 100px; resize: vertical; }
 .tag {
   color: var(--gold2);
   font-weight: 800;
-  font-size: 44px;
-  line-height: 1.15;
+  font-size: var(--slide-kicker-size, 56px);
+  line-height: 1.12;
   letter-spacing: 0.03em;
-  margin: 6px 0 8px;
+  margin: 0;
 }
 .ideas { display: grid; gap: 14px; margin-top: 6px; }
 .idea, .vi { font-size: 35px; line-height: 1.35; font-weight: 700; }
@@ -549,8 +595,8 @@ textarea.f { min-height: 100px; resize: vertical; }
   border-radius: 0;
   overflow: hidden;
 }
-.film-shot .slide h2 { font-size: 34px; }
-.film-shot .layout-title h2 { font-size: 42px; }
+.film-shot .slide h2,
+.film-shot .layout-title h2 { font-size: var(--slide-title-size, 68px); }
 .film-shot .slide.trans-fade,
 .film-shot .slide.anim-rise .el,
 .film-shot .slide.anim-rise .shot.el {
@@ -905,7 +951,7 @@ textarea.f { min-height: 100px; resize: vertical; }
 .present .slide.no-image:not(.is-free) .slide-copy {
   justify-content: flex-start;
   align-items: stretch;
-  top: 20%;
+  top: auto;
 }
 .present .slide.no-image.is-free .slide-copy {
   justify-content: flex-start;
